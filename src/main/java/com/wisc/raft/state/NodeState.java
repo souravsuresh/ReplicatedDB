@@ -1,27 +1,28 @@
 package com.wisc.raft.state;
 
-import com.wisc.raft.log.LogEntry;
+import com.wisc.raft.proto.Raft;
+// import com.wisc.raft.log.LogEntry;
 import com.wisc.raft.constants.Role;
 import java.util.*;
 
 public class NodeState {
 
     private String nodeId;
-    private int currentTerm;
+    private long currentTerm;
     private String votedFor;        // leader id?
-    private List<LogEntry> entries;
+    private List<Raft.LogEntry> entries;
     private Role nodeType;
     
     // volatile state on all servers
-    private int commitIndex;    // index of highest log entry known to be commited 
-    private int lastApplied;    // index of highest log entry applied to state machine
+    private long commitIndex;    // index of highest log entry known to be commited 
+    private long lastApplied;    // index of highest log entry applied to state machine
 
     //volatile state on leaders
     private List<Integer> nextIndex;    // for each server, index of next log entry to send to a particular server
                                         // initialized to leader logIndex+1
     private List<Integer> matchIndex;    // for each server, index of highest log entry known to be replicated on that particular server
                                         // initialized to 0
-    private int leaderTerm;
+    private long leaderTerm;
     
 
     public NodeState(String nodeId) {
@@ -39,11 +40,11 @@ public class NodeState {
         this.leaderTerm = 0;     // @CHECK :: should be -1
         this.nodeId = nodeId;
     }
-    public int getCurrentTerm() {
+    public long getCurrentTerm() {
         return currentTerm;
     }
 
-    public void setCurrentTerm(int currentTerm) {
+    public void setCurrentTerm(long currentTerm) {
         this.currentTerm = currentTerm;
     }
 
@@ -55,23 +56,23 @@ public class NodeState {
         this.votedFor = votedFor;
     }
 
-    public List<LogEntry> getEntries() {
+    public List<Raft.LogEntry> getEntries() {
         return entries;
     }
 
-    public void setEntries(List<LogEntry> entries) {
+    public void setEntries(List<Raft.LogEntry> entries) {
         this.entries = entries;
     }
-    public int getCommitIndex() {
+    public long getCommitIndex() {
         return commitIndex;
     }
-    public void setCommitIndex(int commitIndex) {
+    public void setCommitIndex(long commitIndex) {
         this.commitIndex = commitIndex;
     }
-    public int getLastApplied() {
+    public long getLastApplied() {
         return lastApplied;
     }
-    public void setLastApplied(int lastApplied) {
+    public void setLastApplied(long lastApplied) {
         this.lastApplied = lastApplied;
     }
     public List<Integer> getNextIndex() {
@@ -92,10 +93,10 @@ public class NodeState {
     public void setNodeType(Role nodeType) {
         this.nodeType = nodeType;
     }
-    public int getLeaderTerm() {
+    public long getLeaderTerm() {
         return leaderTerm;
     }
-    public void setLeaderTerm(int leaderTerm) {
+    public void setLeaderTerm(long leaderTerm) {
         this.leaderTerm = leaderTerm;
     }
     public String getNodeId() {

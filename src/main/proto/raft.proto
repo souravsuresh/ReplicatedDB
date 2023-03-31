@@ -4,7 +4,7 @@ syntax = "proto3";
 package com.wisc.raft.proto;
 
 message RequestVote {
-  optional string serverId = 1;
+  optional string candidateId = 1;
   optional uint64 term = 2;
   optional uint64 lastLogTerm = 3;
   optional uint64 lastLogIndex = 4;
@@ -15,19 +15,24 @@ message ResponseVote {
   optional bool grant = 2;
 };
 
+message Command {
+  optional string commandType = 1;
+  optional uint64 key = 2;
+  optional uint64 value = 3;
+};
+
 message LogEntry {
   optional uint64 term = 1;
-  optional uint64 index = 2;
-  optional string commandType = 3;
-  optional uint64 key = 4;
-  optional uint64 value = 5;
+  optional string index = 2;
+  optional Command command = 3;
+  
 };
 
 message AppendEntriesRequest {
-  optional string serverId = 1;
+  optional string leaderId = 1;
   optional uint64 term = 2;
-  optional uint64 lastLogIndex = 3;
-  optional uint64 lastLogTerm = 4;
+  optional uint64 prevLogIndex = 3;
+  optional uint64 prevLogTerm = 4;
   optional uint64 commitIndex = 5;
   repeated LogEntry entries = 6;
 };

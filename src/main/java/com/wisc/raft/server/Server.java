@@ -1,16 +1,10 @@
 package com.wisc.raft.server;
 
 import java.util.*;
-
-import com.wisc.raft.command.Command;
 import com.wisc.raft.constants.Role;
-import com.wisc.raft.rpc.AppendEntriesReq;
-import com.wisc.raft.rpc.AppendEntriesRsp;
-import com.wisc.raft.rpc.RequestVoteReq;
-import com.wisc.raft.state.NodeState;
 import com.wisc.raft.constants.CommandType;
+import com.wisc.raft.state.NodeState;
 import com.wisc.raft.proto.Raft;
-import com.wisc.raft.log.LogEntry;
 
 
 public class Server {
@@ -26,7 +20,7 @@ public class Server {
     private static final long MAX_REQUEST_RETRY = 3;  // retry requests for 3 times
 
     // @TODO: for now maintaining HashMap!! Update this to db updates
-    private HashMap<Integer, Integer> kvStore = new HashMap<>();
+    private HashMap<Long, Long> kvStore = new HashMap<>();
 
     public Server(String nodeId) {
         this.state = new NodeState(nodeId);
@@ -70,11 +64,11 @@ public class Server {
 
         // @TODO : send Request vote RPC all servers (extend with threads to all server)
         Raft.RequestVote.Builder requestBuilder = Raft.RequestVote.newBuilder();
-        requestBuilder.setServerId(this.state.getNodeId());
+        requestBuilder.setCandidateId(this.state.getNodeId());
         requestBuilder.setTerm(this.state.getCurrentTerm());
         requestBuilder.setLastLogIndex(this.state.getCommitIndex());
 
-        int lastLogTerm = this.state.getCommitIndex() == 0? 0 : this.state.getEntries().get(this.state.getEntries().size() - 1).getTerm();
+        long lastLogTerm = this.state.getCommitIndex() == 0? 0 : this.state.getEntries().get(this.state.getEntries().size() - 1).getTerm();
         requestBuilder.setLastLogTerm(lastLogTerm);
         
         Raft.RequestVote request = requestBuilder.build();
@@ -90,7 +84,7 @@ public class Server {
     }
 
     // @TODO send as Actual RPC response (write a wrapper for this!!)
-    public Raft.AppendEntriesResponse AppendEntries(AppendEntriesReq leader) {
+    public Raft.AppendEntriesResponse AppendEntries(Raft.AppendEntriesRequest leader) {
 
         Raft.AppendEntriesResponse.Builder responseBuilder = Raft.AppendEntriesResponse.newBuilder();
 
@@ -119,24 +113,24 @@ public class Server {
 
         //return failure if log doesn't contain an entry at prevLogIndex whose term matches prevLogTerm
         if (this.state.getEntries().size() < leader.getPrevLogIndex() 
-            || leader.getPrevLogTerm() == this.state.getEntries().get(leader.getPrevLogIndex()).getTerm()) {
+            || leader.getPrevLogTerm() == this.state.getEntries().get((int)leader.getPrevLogIndex()).getTerm()) {
             return responseBuilder.build(); 
         }
 
         boolean conflictDeleted = false;
         // NOTE: this started from 0 but adding lastApplied since thats the last applied/ commited state
-        int index = this.state.getLastApplied();
-        for (; index < leader.getEntries().length; index++) {
-            LogEntry newEntry = leader.getEntries()[index];
-            int indexOnServer = leader.getPrevLogIndex() + 1 + index;
+        long index = this.state.getLastApplied();
+        for (; index < leader.getEntriesList().size(); index++) {
+            Raft.LogEntry newEntry = leader.getEntries((int) index);
+            long indexOnServer = leader.getPrevLogIndex() + 1 + index;
         
             //if existing entries conflict with new entries
             if (!conflictDeleted 
                 && this.state.getEntries().size() >= indexOnServer 
-                && !this.state.getEntries().get(indexOnServer).equals(newEntry)) {
+                && !this.state.getEntries().get((int)indexOnServer).equals(newEntry)) {
                 //delete all existing entries starting with first conflicting entry
-                for(int j=indexOnServer; j < this.state.getEntries().size(); ++j){
-                    this.state.getEntries().remove(j);
+                for(long j = indexOnServer; j < this.state.getEntries().size(); ++j){
+                    this.state.getEntries().remove((int) j);
                 }
                 conflictDeleted = true;
             }
@@ -154,7 +148,7 @@ public class Server {
 
     }
     
-    public Raft.ResponseVote recieveRequestVote(RequestVoteReq candidate) {
+    public Raft.ResponseVote recieveRequestVote(Raft.RequestVote candidate) {
         boolean voted = false;
         Raft.ResponseVote.Builder responseBuilder = Raft.ResponseVote.newBuilder();
         
@@ -190,10 +184,10 @@ public class Server {
     //@TODO:: Complete Scheduled state machine orchastrator (add a ScheduledThread?)
     protected void stateMachineOrchastrator() {
         if(this.state.getCommitIndex() > this.state.getLastApplied()) {
-            List<LogEntry> entry = this.state.getEntries();
-            for(int i = this.state.getLastApplied(); i < this.state.getCommitIndex(); ++i) {
-                Command command = entry.get(i).getCommand();
-                if(command.getCommandType() == CommandType.PUT) {
+            List<Raft.LogEntry> entry = this.state.getEntries();
+            for(int i = (int) this.state.getLastApplied(); i < this.state.getCommitIndex(); ++i) {
+                Raft.Command command = entry.get(i).getCommand();
+                if(command.getCommandType().equals(CommandType.PUT.toString())) {
                     // @TODO Add entry to database
                     this.kvStore.put(command.getKey(), command.getValue());
                     this.state.setLastApplied(this.state.getLastApplied() + 1);
@@ -239,9 +233,9 @@ public class Server {
 
     private void sendAppendEntries() {
         Raft.AppendEntriesRequest.Builder requestBuilder = Raft.AppendEntriesRequest.newBuilder();
-        requestBuilder.setServerId(this.state.getNodeId());
+        requestBuilder.setLeaderId(this.state.getNodeId());
         requestBuilder.setTerm(this.state.getCurrentTerm());
-        requestBuilder.setLastLogIndex(this.state.getCommitIndex() == 0?0:this.state.getCommitIndex()-1);
+        requestBuilder.setPrevLogIndex(this.state.getCommitIndex() == 0?0:this.state.getCommitIndex()-1);
         
         // @CHECK :: Snapshot might mess this up!! Possibility is this.state.term
         int delta = 0;
@@ -251,14 +245,12 @@ public class Server {
         if(size >  1) {
             delta += 1; 
         } 
-        if(!this.state.getEntries().get(size - 1).getCommand().getCommandType().equals(CommandType.HEARTBEAT)) {
+        if(!this.state.getEntries().get(size - 1).getCommand().getCommandType().equals(CommandType.HEARTBEAT.toString())) {
             delta += 1;
         }
-        int lastLogTerm = size == 0 ? 0 : this.state.getEntries().get(this.state.getEntries().size() - delta).getTerm();
-        requestBuilder.setLastLogTerm(lastLogTerm);
-        // @ERROR: Ideally this is expecting the LogEntry within the message protobuf. 
-        //          But currently its using our com.wisc.raft.log.LogEntry. Uncomment below line after fix
-        // requestBuilder.addAllEntries(this.state.getEntries().iterator());
+        long lastLogTerm = size == 0 ? 0 : this.state.getEntries().get(this.state.getEntries().size() - delta).getTerm();
+        requestBuilder.setPrevLogTerm(lastLogTerm);
+        requestBuilder.addAllEntries(this.state.getEntries());
         // Raft.AppendEntriesRequest = requestBuilder.build();
         
         //@TODO :: Add service to send the request
@@ -266,7 +258,7 @@ public class Server {
     }
 
     // @TODO change inp and return params to RPC types
-    public int get(int key) {
+    public long get(long key) {
         if(this.state.getNodeType() != Role.LEADER) {
             System.out.println("Cant perform action as this is not leader!!");
             return -1;
@@ -292,10 +284,15 @@ public class Server {
             System.out.println("Cant perform action as this is not leader!!");
             return -1;
         }
-        LogEntry entry = new LogEntry();
-        entry.setCommand(new Command(key, val));
-        entry.setTerm(this.state.getCurrentTerm());
-        entry.setIndex(this.state.getNodeId());
+
+
+        Raft.Command command = Raft.Command.newBuilder().
+                                setKey(key).setValue(val).
+                                setCommandType(CommandType.PUT.toString()).build();
+        
+        Raft.LogEntry entry = Raft.LogEntry.newBuilder().
+                                setCommand(command).
+                                setTerm(this.state.getCurrentTerm()).setIndex(this.state.getNodeId()).build();
 
         this.state.getEntries().add(entry);
         //  @TODO :: Issue appendEntries RPC call
