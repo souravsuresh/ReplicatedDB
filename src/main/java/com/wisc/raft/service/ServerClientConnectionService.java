@@ -3,7 +3,6 @@ package com.wisc.raft.service;
 import com.wisc.raft.constants.CommandType;
 import com.wisc.raft.constants.Role;
 import com.wisc.raft.server.Server;
-import com.wisc.raft.state.NodeState;
 import io.grpc.stub.StreamObserver;
 import org.wisc.raft.proto.Client;
 import org.wisc.raft.proto.ServerClientConnectionGrpc;

@@ -79,10 +79,11 @@ public class Server {
     }
 
     private void resetElectionTimeout()  {
-        System.out.println("Inside reset election timeout!!");
+        System.out.println("[ResetElectionTimeout] Inside reset election timeout!!");
         // @TODO:: cancel all the scneduled futures election
         if(this.state.getNodeType().equals(Role.LEADER)) {
-            System.out.println("Son of bitch you are already leader!! Enjoy!1");
+            System.out.println("[ResetElectionTimeout]  Already a leader! So not participating in Election!");
+            electionScheduler.cancel(true);
             return;
         }
         if (electionScheduler != null && !electionScheduler.isDone()) {
@@ -92,10 +93,11 @@ public class Server {
         this.state.setVotedFor(null);
 //        electionTimeout = ELECTION_TIMEOUT_INTERVAL + random.nextDouble() * ELECTION_TIMEOUT_INTERVAL;
         electionTimeout = random.nextDouble() + 1;
-        System.out.println("Inside resetElectionTimeout " + " : " +  electionTimeout);
-        // @TODO :: schedule new Futures
+        System.out.println("[ResetElectionTimeout] Inside resetElectionTimeout " + " : " +  electionTimeout);
+
         electionScheduler = scheduledExecutorService.schedule(() -> {
             try {
+                this.state.setNodeType(Role.CANDIDATE);
                 initiateRequestVoteRPC();
             } catch (InterruptedException | ExecutionException e) {
                 throw new RuntimeException(e);
@@ -123,10 +125,15 @@ public class Server {
          * 7. while waiting for results/ before validate if we got Append RPC (code has been adeded)
          * wrt response check if its eligible to become leader
          */
+        if(this.state.getNodeType().equals(Role.LEADER)) {
+            System.out.println("[InitiateVote] Already a leader! So not participating in Election!");
+            return;
+        }
 
-        System.out.println("Sleeping before initiate vote");
+        System.out.println("[InitiateVote] Sleeping before initiate vote");
+        Thread.sleep(1);
         // increment current term
-        System.out.println("Inside initiateRequestVoteRPC  !!");
+        System.out.println("[InitiateVote] Inside initiateRequestVoteRPC  !!");
         this.state.setCurrentTerm(this.state.getCurrentTerm() + 1);
         // voting for self
         this.state.setVotedFor(this.state.getNodeId());
@@ -157,76 +164,66 @@ public class Server {
             }
 
         });
-        System.out.println("1 . Bolimage");
-
         List<Future<Integer>> futures = executorService.invokeAll(todo);
-        System.out.println("Bolimage");
+        System.out.println("[InitiateVote] Waiting for all threads to complete");
         for (int i = 0; i < futures.size(); i++) {
             try {
-                System.out.println("2 . Bolimage");
-
                 Integer future = futures.get(i).get();
             } catch (Exception e) {
-                System.out.println(e);
+                System.out.println("[InitiateVote] Exception :: " +e);
             }
         }
+        System.out.println("[InitiateVote] All threads compelted Execution");
 
-        System.out.println("After Futures !!");
-
-        System.out.println(this.state.getNodeType() +  " : " + count);
+        System.out.println("[InitiateVote] Voting Results:  NodeType : " +this.state.getNodeType() +  " Votes : " + count);
 
 
         // @CHECK :: add locks
         if (this.state.getNodeType() != Role.CANDIDATE) {
-            System.out.println("Some other guy took over the leadership!! ");
-        } else if(count != 2) {
-            System.out.println("Not majority");
+            System.out.println("[InitiateVote] Some other guy took over the leadership!! ");
+        } else if(count < cluster.size()/2 + 1) {
+            System.out.println("[InitiateVote] Dit not get majority :: Current Votes -> "+ count + ", Expected Votes =>" + cluster.size()/2);
             this.resetElectionTimeout();
-
         }
         else{
+            System.out.println("[InitiateVote] Got the leadership ::  NodeType : " +this.state.getNodeType() +  " Votes : " + count);
             this.state.setNodeType(Role.LEADER);
             // stop vote timer
             if (electionScheduler != null && !electionScheduler.isDone()) {
                 electionScheduler.cancel(true);
             }
-
-            System.out.println(this.state.getNodeType() +  " : " + count);
-
             // start heartbeat timer
             //startNewHeartbeat();
 
         }
-        //this.resetElectionTimeout();
     }
 
     //TODO PEER param
     private int requestVote(Raft.RequestVote request, Raft.Endpoint endpoint) {
-        System.out.println("Inside requestVote  !!");
+        System.out.println("[RequestVoteWrapper] Inside requestVote for endpoint :: "+ endpoint.getPort());
 
         ManagedChannel channel = ManagedChannelBuilder.forAddress(endpoint.getHost(), endpoint.getPort())
                 .usePlaintext()
                 .build();
 
-        System.out.println("Channel state :: "+ channel.getState(true) + " :: "+ channel.getState(false));
+        System.out.println("[RequestVoteWrapper] Channel state :: "+ channel.getState(true) + " :: "+ channel.getState(false));
         if (channel.getState(false) == ConnectivityState.TRANSIENT_FAILURE){
             System.out.println("Follower is down!! "+ endpoint.getPort());
             return -1;
         }
-        System.out.println(channel + " : " + request.getCandidateId() + " : HELLO");
+        System.out.println("[RequestVoteWrapper] CandidateID : " + request.getCandidateId());
         RaftServiceGrpc.RaftServiceBlockingStub raftServiceBlockingStub = RaftServiceGrpc.newBlockingStub(channel);
 
         Raft.ResponseVote responseVote = raftServiceBlockingStub.requestVotes(request);
         if (responseVote.getGrant()) {
             //What if he became leader
             if (this.state.getCurrentTerm() != responseVote.getTerm() || this.state.getNodeType() != Role.CANDIDATE) {
-                System.out.println("ignore preVote RPC result");
+                System.out.println("[RequestVoteWrapper] The response term is mismatched or Current node state is not candidate :: "+this.state.getNodeType());
                 return 0;
             }
 
             if (responseVote.getTerm() > this.state.getCurrentTerm()) {
-                System.out.println("Received pre vote response from server {} " +
-                                "in term {} (this server's term was {})");
+                System.out.println("[RequestVoteWrapper] Received term response from other follower :: "+ responseVote.getTerm() +" more than current term ::" +this.state.getCurrentTerm());
 
                 //stepDown(response.getTerm());
                 return 0;
@@ -235,10 +232,8 @@ public class Server {
                 count++;
                 return 1;
             }
-
-
         } else {
-            System.out.println("Not granted by :: " + endpoint.getPort() + " Response :: "+ responseVote.getTerm() + " Current :: " + this.state.getCurrentTerm());
+            System.out.println("[RequestVoteWrapper] Not granted by :: " + endpoint.getPort() + " Response :: "+ responseVote.getTerm() + " Current :: " + this.state.getCurrentTerm());
         }
         return 0;
 

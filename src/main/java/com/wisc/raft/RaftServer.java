@@ -15,14 +15,16 @@ import java.util.List;
 public class RaftServer {
     /*args[0]  = our Name, args[1] : our port number , args[2] : string of followers*/
     public static void main(String[] args) throws IOException, InterruptedException {
-        System.out.println("Inside Main bitches");
+        System.out.println("[RaftServer] Starting the main server!!");
         // @TODO :: Take the server ids and command line args
 
 
         List<Raft.ServerConnect> serverList = new ArrayList<>();
         for (int i=2;i<args.length;i++) {
             String [] arg = args[i].split("_");
+            if(arg[0] == args[0]) continue;
             int serverId = Integer.parseInt(arg[0]);
+            
             Raft.Endpoint endpoint = Raft.Endpoint.newBuilder().setHost(arg[1]).setPort(Integer.parseInt(arg[2])).build();
             Raft.ServerConnect server = Raft.ServerConnect.newBuilder().setServerId(serverId).setEndpoint(endpoint).build();
             serverList.add(server);
@@ -35,11 +37,11 @@ public class RaftServer {
 
         // @TODO: RPC initalization etc , change this name
         io.grpc.Server server = ServerBuilder.forPort(Integer.parseInt(args[1])).addService(raftConsensusService).build();
+
         //Start the server
         raftServer.start();
         server.start();
         server.awaitTermination();
-
 
         // @TODO: health checks if required/ logging the states of server periodically etc
     }
