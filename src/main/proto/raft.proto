@@ -3,6 +3,11 @@ syntax = "proto3";
 
 package com.wisc.raft.proto;
 
+service RaftService{
+  rpc RequestVotes(RequestVote) returns (ResponseVote);
+  rpc AppendEntries(AppendEntriesRequest) returns (AppendEntriesResponse);
+};
+
 message RequestVote {
   optional string candidateId = 1;
   optional uint64 term = 2;
@@ -40,4 +45,14 @@ message AppendEntriesRequest {
 message AppendEntriesResponse {
   optional uint64 term = 1;
   optional bool success = 2;
+};
+
+message Endpoint {
+  optional string host = 1;
+  optional uint32 port = 2;
+};
+
+message ServerConnect {
+  optional uint32 server_id = 1;
+  optional Endpoint endpoint = 2;
 };

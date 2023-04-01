@@ -5,14 +5,18 @@ package org.wisc.raft.proto;
 // service ServerHello{
 //   rpc GetFeature(SampleRequest) returns (SampleResponse);
 // }
+service ServerClientConnection{
+  rpc Get(Request) returns (Response);
+  rpc Put(Request) returns (Response);
+};
 
 message Request {
   uint64 key = 1;
   uint64 value = 2;
   string commandType = 3;
-}
+};
 
 message Response {
     uint64 value = 1;
     bool success = 2;
-}
+};
