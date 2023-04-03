@@ -40,11 +40,15 @@ message AppendEntriesRequest {
   optional uint64 prevLogTerm = 4;
   optional uint64 commitIndex = 5;
   repeated LogEntry entries = 6;
+  optional uint64 indexTracked = 7;
 };
 
 message AppendEntriesResponse {
   optional uint64 term = 1;
   optional bool success = 2;
+  optional uint64 lastMatchIndex = 3;
+  optional uint64 lastMatchTerm = 4;
+
 };
 
 message Endpoint {

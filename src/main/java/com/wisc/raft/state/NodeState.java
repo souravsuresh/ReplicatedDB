@@ -23,6 +23,16 @@ public class NodeState {
     private List<Integer> matchIndex;    // for each server, index of highest log entry known to be replicated on that particular server
                                         // initialized to 0
     private long leaderTerm;
+
+    public String getLeaderId() {
+        return leaderId;
+    }
+
+    public void setLeaderId(String leaderId) {
+        this.leaderId = leaderId;
+    }
+
+    private String leaderId;
     
 
     public NodeState(String nodeId) {
