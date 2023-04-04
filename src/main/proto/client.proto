@@ -8,6 +8,7 @@ package org.wisc.raft.proto;
 service ServerClientConnection{
   rpc Get(Request) returns (Response);
   rpc Put(Request) returns (Response);
+  rpc getLeaderInfo(Status) returns(LeaderStatusResponse);
 };
 
 message Request {
@@ -19,4 +20,17 @@ message Request {
 message Response {
     uint64 value = 1;
     bool success = 2;
+};
+
+message Status{
+  string ask = 1;
+};
+
+
+
+message LeaderStatusResponse{
+  optional uint32 server_id = 1;
+  bool success = 2;
+  optional string host = 3;
+  optional uint32 port = 4;
 };
