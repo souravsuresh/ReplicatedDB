@@ -86,19 +86,9 @@ public class RaftConsensusService extends RaftServiceGrpc.RaftServiceImplBase {
         long commitIndex = request.getCommitIndex();
         int indexTracked = (int) request.getIndexTracked();
         Raft.AppendEntriesResponse.Builder responseBuilder = Raft.AppendEntriesResponse.newBuilder();
-        this.server.getLock().lock();
         this.server.getState().setHeartbeatTrackerTime(System.currentTimeMillis());
+        this.server.getLock().lock();
         try {
-//            if (!this.server.getState().getVotedFor().equals(serverID)
-//                    && !this.server.getState().getVotedFor().equals(this.server.getState().getNodeId())) {
-//                System.out.println("[RequestVoteService] I didnt get request from my leader. Known leader :: "
-//                        + this.server.getState().getVotedFor() + " Request Leader :: " + serverID);
-//                responseBuilder.setSuccess(false).setTerm(-5);
-//                responseObserver.onNext(responseBuilder.build());
-//                responseObserver.onCompleted();
-//                return;
-//            }
-
             if (leaderTerm < this.server.getState().getCurrentTerm()) {
                 responseBuilder = responseBuilder.setSuccess(false).setTerm(this.server.getState().getCurrentTerm()); // What ??
                 responseObserver.onNext(responseBuilder.build());

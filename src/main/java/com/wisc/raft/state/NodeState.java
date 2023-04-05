@@ -1,7 +1,6 @@
 package com.wisc.raft.state;
 
 import com.wisc.raft.proto.Raft;
-// import com.wisc.raft.log.LogEntry;
 import com.wisc.raft.constants.Role;
 import lombok.Getter;
 import lombok.Setter;
@@ -14,7 +13,7 @@ public class NodeState {
 
     private String nodeId;
     private long currentTerm;
-    private String votedFor;        // leader id?
+    private String votedFor;       
     private List<Raft.LogEntry> entries;
     private Role nodeType;
     

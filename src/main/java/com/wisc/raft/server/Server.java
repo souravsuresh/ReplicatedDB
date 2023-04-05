@@ -1,13 +1,10 @@
 package com.wisc.raft.server;
 
-import com.wisc.raft.constants.CommandType;
 import com.wisc.raft.constants.Role;
-import com.wisc.raft.dto.PeerInfo;
 import com.wisc.raft.proto.Raft;
 import com.wisc.raft.proto.RaftServiceGrpc;
 import com.wisc.raft.service.RaftConsensusService;
 import com.wisc.raft.state.NodeState;
-import io.grpc.ConnectivityState;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import lombok.Getter;
@@ -76,21 +73,22 @@ public class Server {
         Runnable initiateElectionRPCRunnable = () -> initiateElectionRPC();
         Runnable initiateHeartbeatRPCRunnable = () -> initiateHeartbeatRPC();
 
-        this.electionExecutor = new ThreadPoolExecutor(cluster.size(), cluster.size(), 60, TimeUnit.SECONDS, new LinkedBlockingQueue<Runnable>());
-        this.heartBeatExecutor = new ThreadPoolExecutor(cluster.size(), cluster.size(), 60, TimeUnit.SECONDS, new LinkedBlockingQueue<Runnable>());
+        this.electionExecutor = new ThreadPoolExecutor(cluster.size(), 10, 60, TimeUnit.SECONDS, new LinkedBlockingQueue<Runnable>());
+        this.heartBeatExecutor = new ThreadPoolExecutor(cluster.size(), 10, 60, TimeUnit.SECONDS, new LinkedBlockingQueue<Runnable>());
         electionExecutorService =  Executors.newSingleThreadScheduledExecutor();
-        electionScheduler = electionExecutorService.scheduleAtFixedRate(initiateElectionRPCRunnable, 1, 5, TimeUnit.SECONDS);
-         // electionScheduler = electionExecutorService.scheduleAtFixedRate(initiateElectionRPCRunnable, 1L, (long) (100 + random.nextDouble() * ELECTION_TIMEOUT_INTERVAL), TimeUnit.SECONDS);
+        electionScheduler = electionExecutorService.scheduleAtFixedRate(initiateElectionRPCRunnable, 1, (long) (100 + random.nextDouble() * ELECTION_TIMEOUT_INTERVAL), TimeUnit.MILLISECONDS);
         heartbeatExecutorService =  Executors.newSingleThreadScheduledExecutor();
-        heartBeatScheduler = heartbeatExecutorService.scheduleAtFixedRate(initiateHeartbeatRPCRunnable, 5, 2, TimeUnit.SECONDS);
+        heartBeatScheduler = heartbeatExecutorService.scheduleAtFixedRate(initiateHeartbeatRPCRunnable, 1, HEARTBEAT_TIMEOUT_INTERVAL, TimeUnit.MILLISECONDS);
     }
 
     public void initiateElectionRPC() {
         Raft.RequestVote.Builder requestBuilder = Raft.RequestVote.newBuilder();
-
+        System.out.println("Starting election at :: "+ System.currentTimeMillis());
         lock.lock();
         try {
-            if(this.state.getHeartbeatTrackerTime() != 0 && System.currentTimeMillis() > (this.state.getHeartbeatTrackerTime() + 2 * 1000) ) {
+            System.out.println("[initiateElectionRPC] Current time :: " + System.currentTimeMillis() + " HeartBeat timeout time :: " +  (this.state.getHeartbeatTrackerTime() + 5 * 1000 * MAX_REQUEST_RETRY));
+            if(this.state.getHeartbeatTrackerTime() != 0 && System.currentTimeMillis() > (this.state.getHeartbeatTrackerTime() +  HEARTBEAT_TIMEOUT_INTERVAL * MAX_REQUEST_RETRY) ) {
+                System.out.println("[initiateElectionRPC] Stepping down as follower");
                 this.state.setVotedFor(null);
                 this.state.setNodeType(Role.FOLLOWER);
             }
@@ -106,7 +104,6 @@ public class Server {
                 System.out.println("[initiateElectionRPC]  Already voted ! So not participating in Election! : " + this.state.getVotedFor());
                 return;
             }
-//            if(this.state.getHeartbeatTrackerTime() != 0 && System.currentTimeMillis() > this.state.getHeartbeatTrackerTime() + HEARTBEAT_TIMEOUT_INTERVAL )
 
             System.out.println("[initiateElectionRPC] Starting the voting process");
             this.state.setVotedFor(this.state.getNodeId());
@@ -151,6 +148,7 @@ public class Server {
                         System.out.println("[RequestVoteWrapper] Some other guy took over the leadership!! ");
                     } else if (this.state.getTotalVotes() > cluster.size() / 2) {
                         System.out.println("[RequestVoteWrapper] Got the leadership ::  NodeType : " + this.state.getNodeType() + " Votes : " + this.state.getTotalVotes() + " current term: " + this.state.getCurrentTerm());
+                        this.state.setHeartbeatTrackerTime(System.currentTimeMillis());
                         this.state.setNodeType(Role.LEADER);
                     }
                     System.out.println("[RequestVoteWrapper] Number of Votes : " + this.state.getTotalVotes());
@@ -160,8 +158,6 @@ public class Server {
             } else {
                 System.out.println("[RequestVoteWrapper] Not granted by :: " + endpoint.getPort() + " Response :: " + responseVote.getTerm() + " Current :: " + this.state.getCurrentTerm());
             }
-            channel.shutdownNow();
-
         }catch (Exception ex) {
                 System.out.println("[RequestVoteWrapper] Server might not be up!! "+ ex);
         }
@@ -170,21 +166,16 @@ public class Server {
     }
 
     public void initiateHeartbeatRPC() {
-        lock.lock();
+
         try {
+            System.out.println("[RaftService] Log Entries has " + this.state.getEntries().size() + " entries");
             if (!this.state.getNodeType().equals(Role.LEADER)) {
                 System.out.println("[initiateHeartbeatRPC] Not a leader! So not participating in HeartBeat!");
                 return;
             }
-        }
-        catch(Exception e){
-            System.out.println("[initiateHeartbeatRPC] " + e);
-        }
-        finally {
-            lock.unlock();
-        }
-        try {
-            System.out.println("[RaftService] Log Entries has " + this.state.getEntries().size() + " entries");
+            System.out.println("[initiateHeartbeatRPC] Current Node is a leader! Reseting the heartbeat timeout to :: "+System.currentTimeMillis()); 
+            this.state.setHeartbeatTrackerTime(System.currentTimeMillis());
+
             this.state.getEntries().stream().forEach(le ->
                     System.out.println(le.getTerm() + " :: " + le.getCommand().getKey() +" -> "+le.getCommand().getValue()));
 
@@ -193,7 +184,6 @@ public class Server {
                     this.heartBeatExecutor.submit(() -> sendAppendEntries(serv));
                 }
             });
-            this.state.setHeartbeatTrackerTime(System.currentTimeMillis());
         } catch (Exception e) {
             System.out.println("[initiateHeartbeatRPC] excp :: "+ e);
         }
@@ -202,15 +192,13 @@ public class Server {
 
     private void sendAppendEntries(Raft.ServerConnect server) {
 
-        System.out.println("[sendAppendEntries] : Sending request to " + server.getServerId());
+        System.out.println("[sendAppendEntries] : Sending request to " + server.getServerId() + " at "+System.currentTimeMillis());
         List<Raft.LogEntry> entryToSend = new ArrayList<>();
 
         Raft.AppendEntriesRequest.Builder requestBuilder = Raft.AppendEntriesRequest.newBuilder();
-
-        lock.lock();
         try {
             if (this.state.getNodeType() != Role.LEADER) {
-                System.out.println("[sendAppendEntries] : Current node is leader so cant send heartbeats");
+                System.out.println("[sendAppendEntries] : Current node is not leader so cant send heartbeats");
                 return;
             }
             int followerIndex = this.state.getNextIndex().get(server.getServerId());
@@ -218,10 +206,6 @@ public class Server {
             long currentIndex = this.state.getCommitIndex();
             long currentTerm = this.state.getCurrentTerm();
             String nodeId = this.state.getNodeId();
-            if (currentIndex < followerIndex) {
-                System.out.println("[sendAppendEntries] : Current index : "+ currentIndex+" Follower Index : "+ followerIndex +"This cannot happen right ??");
-                return;
-            }
 
             if (followerIndex == 0 || this.state.getEntries().isEmpty()) {
                 requestBuilder.setPrevLogTerm(0);
@@ -231,13 +215,12 @@ public class Server {
                 requestBuilder.setPrevLogIndex(followerIndex - 1);
             }
 
-            requestBuilder.setTerm(currentTerm); // Is this correct ?
+            requestBuilder.setTerm(currentTerm);
             requestBuilder.setLeaderId(nodeId);
 
             requestBuilder.setCommitIndex(this.state.getCommitIndex()); // Last Commit Index
             List<Raft.LogEntry> entries = this.state.getEntries();
 
-            //ConvertToInt
             for (long i = peerMatchIndex + 1; i < entries.size(); i++) {
                 entryToSend.add(entries.get((int) i));
             }
@@ -246,8 +229,6 @@ public class Server {
         } catch (Exception e) {
             e.printStackTrace();
             System.out.println("[sendAppendEntries] ex : "+ e);
-        } finally {
-            lock.unlock();
         }
 
         // @CHECK :: Snapshot might mess this up!! Possibility is this.state.term
