@@ -25,12 +25,12 @@ public class ServerClientConnectionService extends ServerClientConnectionGrpc.Se
             System.out.println("Cant perform action as this is not leader!!");
             res.onNext(response);
         }
-        else if(commandType.equals(CommandType.GET)){
-            long ret = server.get(key);
-            if(ret != -1){
-                response = Client.Response.newBuilder().setSuccess(true).setValue(ret).build();
-            }
-        }
+//        else if(commandType.equals(CommandType.GET)){
+//            long ret = server.get(key);
+//            if(ret != -1){
+//                response = Client.Response.newBuilder().setSuccess(true).setValue(ret).build();
+//            }
+//        }
 
         res.onCompleted();
 
@@ -47,12 +47,12 @@ public class ServerClientConnectionService extends ServerClientConnectionGrpc.Se
         Client.Response response = Client.Response.newBuilder().setSuccess(false).setValue(-1).build();
 
         //This shouldn't work
-        if(commandType.equals(CommandType.PUT) || commandType.equals(CommandType.HEARTBEAT)){
-            int ret = server.put(key, val);
-            if(ret != -1){
-                response = Client.Response.newBuilder().setSuccess(true).setValue(ret).build();
-            }
-        }
+//        if(commandType.equals(CommandType.PUT) || commandType.equals(CommandType.HEARTBEAT)){
+//            int ret = server.put(key, val);
+//            if(ret != -1){
+//                response = Client.Response.newBuilder().setSuccess(true).setValue(ret).build();
+//            }
+//        }
         res.onNext(response);
         res.onCompleted();
 

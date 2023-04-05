@@ -3,8 +3,13 @@ package com.wisc.raft.state;
 import com.wisc.raft.proto.Raft;
 // import com.wisc.raft.log.LogEntry;
 import com.wisc.raft.constants.Role;
+import lombok.Getter;
+import lombok.Setter;
+
 import java.util.*;
 
+@Getter
+@Setter
 public class NodeState {
 
     private String nodeId;
@@ -24,6 +29,17 @@ public class NodeState {
                                         // initialized to 0
     private long leaderTerm;
 
+    private long heartbeatTrackerTime;
+    public int getTotalVotes() {
+        return totalVotes;
+    }
+
+    public void setTotalVotes(int totalVotes) {
+        this.totalVotes = totalVotes;
+    }
+
+    private int totalVotes;
+
     public String getLeaderId() {
         return leaderId;
     }
@@ -39,7 +55,7 @@ public class NodeState {
         this.currentTerm = 0;
         this.votedFor = null;
         this.entries = new ArrayList<>();
-
+        totalVotes = 0;
         this.commitIndex = 0;   
         this.lastApplied = 0;       // @CHECK :: should be -1
 
@@ -49,6 +65,8 @@ public class NodeState {
         this.nodeType = Role.FOLLOWER;
         this.leaderTerm = 0;     // @CHECK :: should be -1
         this.nodeId = nodeId;
+
+        this.heartbeatTrackerTime = 0;
     }
     public long getCurrentTerm() {
         return currentTerm;
