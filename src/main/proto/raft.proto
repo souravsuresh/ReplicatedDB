@@ -11,8 +11,8 @@ service RaftService{
 message RequestVote {
   optional string candidateId = 1;
   optional uint64 term = 2;
-  optional uint64 lastLogTerm = 3;
-  optional uint64 lastLogIndex = 4;
+  optional uint64 leaderLastAppliedTerm = 3;
+  optional uint64 leaderLastAppliedIndex = 4;
 };
 
 message ResponseVote {

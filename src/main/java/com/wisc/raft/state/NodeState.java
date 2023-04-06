@@ -14,13 +14,15 @@ public class NodeState {
     private String nodeId;
     private long currentTerm;
     private String votedFor;       
+    private String nodeAddress;
     private List<Raft.LogEntry> entries;
+    private List<Raft.LogEntry> snapshot;
     private Role nodeType;
     
     // volatile state on all servers
     private long commitIndex;    // index of highest log entry known to be commited 
     private long lastApplied;    // index of highest log entry applied to state machine
-
+    private long lastLongIndex;  // index of last log entry
     //volatile state on leaders
     private List<Integer> nextIndex;    // for each server, index of next log entry to send to a particular server
                                         // initialized to leader logIndex+1
@@ -54,6 +56,7 @@ public class NodeState {
         this.currentTerm = 0;
         this.votedFor = null;
         this.entries = new ArrayList<>();
+        this.snapshot = new ArrayList<>();
         totalVotes = 0;
         this.commitIndex = 0;   
         this.lastApplied = 0;       // @CHECK :: should be -1

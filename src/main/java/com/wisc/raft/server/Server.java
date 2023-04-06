@@ -76,9 +76,11 @@ public class Server {
         this.electionExecutor = new ThreadPoolExecutor(cluster.size(), 10, 60, TimeUnit.SECONDS, new LinkedBlockingQueue<Runnable>());
         this.heartBeatExecutor = new ThreadPoolExecutor(cluster.size(), 10, 60, TimeUnit.SECONDS, new LinkedBlockingQueue<Runnable>());
         electionExecutorService =  Executors.newSingleThreadScheduledExecutor();
-        electionScheduler = electionExecutorService.scheduleAtFixedRate(initiateElectionRPCRunnable, 1, (long) (100 + random.nextDouble() * ELECTION_TIMEOUT_INTERVAL), TimeUnit.MILLISECONDS);
+        // electionScheduler = electionExecutorService.scheduleAtFixedRate(initiateElectionRPCRunnable, 1, (long) (100 + random.nextDouble() * ELECTION_TIMEOUT_INTERVAL), TimeUnit.MILLISECONDS);
+        electionScheduler = electionExecutorService.scheduleAtFixedRate(initiateElectionRPCRunnable, 1, 10, TimeUnit.SECONDS);
         heartbeatExecutorService =  Executors.newSingleThreadScheduledExecutor();
-        heartBeatScheduler = heartbeatExecutorService.scheduleAtFixedRate(initiateHeartbeatRPCRunnable, 1, HEARTBEAT_TIMEOUT_INTERVAL, TimeUnit.MILLISECONDS);
+        // heartBeatScheduler = heartbeatExecutorService.scheduleAtFixedRate(initiateHeartbeatRPCRunnable, 1, HEARTBEAT_TIMEOUT_INTERVAL, TimeUnit.MILLISECONDS);
+        heartBeatScheduler = heartbeatExecutorService.scheduleAtFixedRate(initiateHeartbeatRPCRunnable, 1, 5, TimeUnit.SECONDS);
     }
 
     public void initiateElectionRPC() {
@@ -94,7 +96,7 @@ public class Server {
             }
             if (this.state.getNodeType().equals(Role.LEADER)) {
                 System.out.println("[initiateElectionRPC]  Already a leader! So not participating in Election!");
-                //Random rn = new Random();
+                //@TODO :: remove this once client code is up
                 for(int i=0;i<1;i++){
                     this.state.getEntries().add(Raft.LogEntry.newBuilder().setCommand(Raft.Command.newBuilder().setValue(random.nextInt(10)).setKey(random.nextInt(10)).build()).setTerm(this.state.getCurrentTerm()).setIndex("Bolimaga").build());
                 }
@@ -111,9 +113,9 @@ public class Server {
             this.state.setCurrentTerm(this.state.getCurrentTerm() + 1);
             requestBuilder.setCandidateId(this.state.getNodeId());
             requestBuilder.setTerm(this.state.getCurrentTerm());
-            requestBuilder.setLastLogIndex(this.state.getCommitIndex());
-            long lastLogTerm = this.state.getCommitIndex() == 0 ? 0 : this.state.getEntries().get(this.state.getEntries().size() - 1).getTerm();
-            requestBuilder.setLastLogTerm(lastLogTerm);
+            long lastLogTerm = this.state.getLastApplied() == 0 ? -1 : this.state.getEntries().get(this.state.getLastApplied()).getTerm();
+            requestBuilder.setLeaderLastAppliedTerm(lastLogTerm);
+            requestBuilder.setLeaderLastAppliedIndex(this.state.getLastApplied());
             this.state.setTotalVotes(1);
         }
         catch(Exception e){

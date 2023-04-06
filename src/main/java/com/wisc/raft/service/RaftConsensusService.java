@@ -12,8 +12,6 @@ public class RaftConsensusService extends RaftServiceGrpc.RaftServiceImplBase {
 
     Server server;
 
-
-
     public RaftConsensusService(Server server) {
         this.server = server;
     }
@@ -38,6 +36,16 @@ public class RaftConsensusService extends RaftServiceGrpc.RaftServiceImplBase {
             if (request.getTerm() <= this.server.getState().getCurrentTerm()
                     && this.server.getState().getNodeType().equals(Role.LEADER)) {
                 System.out.println("[RequestVoteService] Oops!! Candidate cant be voting as you are already a leader");
+                responseObserver.onNext(responseBuilder.build());
+                responseObserver.onCompleted();
+                return;
+            }
+
+            long lastLogTerm = this.server.getState().getLastApplied() == 0 ? -1 : this.server.getState().getEntries().get(this.server.getState().getLastApplied()).getTerm();
+
+
+            if(request.getLeaderLastAppliedTerm()  < lastLogTerm || request.getLeaderLastAppliedIndex() < this.server.getState().getEntries().get(this.server.getState().getLastApplied())){
+                System.out.println("[RequestVoteService] You have bigger Term or more entries than the pot. leader " + " Leader Term : " + request.getLeaderLastAppliedTerm() + " My Term : " + lastLogTerm);
                 responseObserver.onNext(responseBuilder.build());
                 responseObserver.onCompleted();
                 return;
@@ -154,4 +162,8 @@ public class RaftConsensusService extends RaftServiceGrpc.RaftServiceImplBase {
             this.server.getLock().unlock();
         }
     }
+
+
+    
+
 }
