@@ -320,11 +320,11 @@ public class Server {
             String nodeId = this.state.getNodeId();
 
             if (followerIndex == 0 || this.state.getEntries().isEmpty()) {
-                requestBuilder.setPrevLogIndex(0);
-                requestBuilder.setPrevLogTerm(-1);
+                requestBuilder.setLastAppendedLogIndex(0);
+                requestBuilder.setLastAppendedLogTerm(-1);
             } else {
-                requestBuilder.setPrevLogTerm(this.state.getEntries().get((int) this.state.getLastApplied()).getTerm());
-                requestBuilder.setPrevLogIndex(this.state.getLastApplied());
+                requestBuilder.setLastAppendedLogIndex(this.state.getEntries().get((int) this.state.getLastApplied()).getTerm());
+                requestBuilder.setLastAppendedLogIndex(this.state.getLastApplied());
             }
 
             requestBuilder.setTerm(currentTerm); // Is this correct ?
