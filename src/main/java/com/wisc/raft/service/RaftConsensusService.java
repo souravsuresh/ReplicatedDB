@@ -88,9 +88,9 @@ public class RaftConsensusService extends RaftServiceGrpc.RaftServiceImplBase {
     public void appendEntries(Raft.AppendEntriesRequest request, StreamObserver<Raft.AppendEntriesResponse> responseObserver) {
         System.out.println("appendEntries : Follower and my terms is : " + this.server.getState().getCurrentTerm());
         long leaderTerm = request.getTerm();
-        long lastIndex = request.getPrevLogIndex();
+        long lastIndex = request.getLastAppendedLogIndex();
         String serverID = request.getLeaderId();
-        long lastTerm = request.getPrevLogTerm();
+        long lastTerm = request.getLastAppendedLogTerm();
         long commitIndex = request.getCommitIndex();
         int indexTracked = (int) request.getIndexTracked();
         Raft.AppendEntriesResponse.Builder responseBuilder = Raft.AppendEntriesResponse.newBuilder();
@@ -111,7 +111,7 @@ public class RaftConsensusService extends RaftServiceGrpc.RaftServiceImplBase {
                 responseBuilder.setTerm(this.server.getState().getCurrentTerm());
 
                 //I guess check commit and revert in this design TODO
-                if (request.getPrevLogIndex() > this.server.getState().getEntries().size()) {
+                if (request.getLastAppendedLogIndex() > this.server.getState().getEntries().size()) {
                     //Ideally reject as this would lead to gaps
                     responseBuilder = responseBuilder.setSuccess(false).setTerm(-3); // What ??
                     responseObserver.onNext(responseBuilder.build());
@@ -122,7 +122,7 @@ public class RaftConsensusService extends RaftServiceGrpc.RaftServiceImplBase {
                 List<Raft.LogEntry> currentEntries = this.server.getState().getEntries();
                 List<Raft.LogEntry> leaderEntries = request.getEntriesList();
 
-                if (request.getPrevLogIndex() != -1 && this.server.getState().getEntries().size() > 0 && this.server.getState().getEntries().get((int) request.getPrevLogIndex()).getTerm() != request.getPrevLogTerm()) {
+                if (request.getLastAppendedLogTerm() != -1 && this.server.getState().getEntries().size() > 0 && this.server.getState().getEntries().get((int) request.getLastAppendedLogIndex()).getTerm() != request.getLastAppendedLogTerm()) {
                     System.out.println("Rejecting AppendEntries RPC: terms don't agree");
                     //rollback by sending one at a time
                     responseBuilder = responseBuilder.setSuccess(false).setTerm(-4); // What ??
@@ -145,8 +145,8 @@ public class RaftConsensusService extends RaftServiceGrpc.RaftServiceImplBase {
 //                    }
 //
 //                }
-                if(this.server.getState().getEntries().size() > (int) request.getPrevLogIndex() + 1) {
-                    this.server.getState().getEntries().subList((int) request.getPrevLogIndex() + 1, this.server.getState().getEntries().size()).clear();
+                if(this.server.getState().getEntries().size() > (int) request.getLastAppendedLogIndex() + 1) {
+                    this.server.getState().getEntries().subList((int) request.getLastAppendedLogIndex() + 1, this.server.getState().getEntries().size()).clear();
                 }
                 this.server.getState().getEntries().addAll(leaderEntries);
                 long index = this.server.getState().getEntries().size() - 1;
