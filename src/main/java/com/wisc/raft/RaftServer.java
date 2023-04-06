@@ -2,6 +2,7 @@ package com.wisc.raft;
 
 import com.wisc.raft.proto.Raft;
 import com.wisc.raft.server.Server;
+import com.wisc.raft.service.Database;
 import com.wisc.raft.service.RaftConsensusService;
 import io.grpc.ServerBuilder;
 import lombok.extern.slf4j.Slf4j;
@@ -17,7 +18,7 @@ public class RaftServer {
     public static void main(String[] args) throws IOException, InterruptedException {
         System.out.println("[RaftServer] Starting the main server!!");
         // @TODO :: Take the server ids and command line args
-
+        Database database = new Database("/Users/varun/Documents/cs749/769up/ReplicatedDB/src/main/resources/leveldb");
 
         List<Raft.ServerConnect> serverList = new ArrayList<>();
         for (int i=2;i<args.length;i++) {

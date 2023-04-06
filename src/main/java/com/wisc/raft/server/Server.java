@@ -1,14 +1,11 @@
 package com.wisc.raft.server;
 
-import com.wisc.raft.constants.CommandType;
 import com.wisc.raft.constants.Role;
-import com.wisc.raft.dto.PeerInfo;
 import com.wisc.raft.proto.Raft;
 import com.wisc.raft.proto.RaftServiceGrpc;
 import com.wisc.raft.service.Database;
 import com.wisc.raft.service.RaftConsensusService;
 import com.wisc.raft.state.NodeState;
-import io.grpc.ConnectivityState;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import lombok.Getter;
@@ -75,7 +72,7 @@ public class Server {
 
     public void init() {
         lock = new ReentrantLock();
-        db = new Database();
+        //db = new Database();
         List<Integer> matchIndex = new ArrayList<>();
         List<Integer> nextIndex = new ArrayList<>();
         System.out.println("Cluster size : " + cluster.size());

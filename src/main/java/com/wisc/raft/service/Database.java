@@ -1,38 +1,89 @@
 package com.wisc.raft.service;
 
 import com.wisc.raft.proto.Raft;
-import com.wisc.raft.state.NodeState;
-import javafx.util.Pair;
+import org.iq80.leveldb.DB;
+import org.iq80.leveldb.Options;
 
-import java.util.HashMap;
-import java.util.Map;
+import java.io.*;
+import java.nio.ByteBuffer;
 import java.util.Objects;
+
+import static org.iq80.leveldb.impl.Iq80DBFactory.factory;
 
 public class Database {
 
-    Map<Long , Pair<Long, Raft.LogEntry>> dbentries ;
-    public Database(){
-        dbentries = new HashMap<>();
-        //this.nodeState = nodeState;
+    private String path;
+    public DB getDb() {
+        return db;
     }
 
-    public int commit(Raft.LogEntry logEntry){
-        Pair pair = dbentries.put(logEntry.getCommand().getKey(), new Pair(logEntry.getIndex(), logEntry));
-        if (Objects.isNull(pair)){
-            return -1;
-        }
-        else{
-            return 1;
+    public void setDb(DB db) {
+        this.db = db;
+    }
+
+    private DB db;
+
+    public Database(String path) {
+        Options options = new Options();
+        options.createIfMissing(true);
+        this.path = path;
+        try {
+            db = factory.open(new File(this.path), options);
+        } catch (Exception e) {
+            System.out.println("Error in Database creation : " + e);
         }
     }
 
-    public long read(long key){
-        Pair<Long, Raft.LogEntry> pair = dbentries.get(key);
-        if (Objects.isNull(pair)){
+    public static byte[] serialize(Object obj) throws Exception {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        ObjectOutputStream os = new ObjectOutputStream(out);
+        os.writeObject(obj);
+        os.flush();
+        return out.toByteArray();
+    }
+
+    // Deserialize a byte array to an object
+    public static Raft.LogEntry deserialize(byte[] data) throws Exception {
+        ByteArrayInputStream in = new ByteArrayInputStream(data);
+        ObjectInputStream is = new ObjectInputStream(in);
+        return (Raft.LogEntry) is.readObject();
+    }
+
+    public int commit(Raft.LogEntry logEntry) {
+        byte[] keyBytes = ByteBuffer.allocate(Long.BYTES).putLong(logEntry.getCommand().getKey()).array();
+        if (Objects.isNull(keyBytes)) {
+            System.out.println("[Database] Key cannot not be serialized");
             return -1;
         }
-        else{
-            return pair.getValue().getCommand().getValue();
+        try {
+            byte[] object = serialize(logEntry);
+            if (Objects.isNull(keyBytes)) {
+                System.out.println("[Database] LogEntry cannot not be serialized");
+                return 1;
+            }
+            db.put(keyBytes, object);
+            return 0;
+        } catch (Exception e) {
+            System.out.println("[Database] Exception while serializing : " + e);
         }
+        return 0;
+    }
+
+    public long read(long key) {
+        byte[] keyBytes = ByteBuffer.allocate(Long.BYTES).putLong(key).array();
+        if (Objects.isNull(keyBytes)) {
+            System.out.println("[Database] Object not retrieved");
+            return -1;
+        }
+        byte[] bytes = db.get(keyBytes);
+        try {
+            Raft.LogEntry logEntry = deserialize(bytes);
+            return logEntry.getCommand().getValue();
+        } catch (Exception e) {
+            System.out.println("[Database] Exception while deserializing : " + e);
+        }
+        return 0;
+
+
     }
 }
