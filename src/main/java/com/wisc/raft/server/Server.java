@@ -237,7 +237,7 @@ public class Server {
                 System.out.println("[initiateHeartbeatRPC] Not a leader! So not participating in HeartBeat!");
                 return;
             }
-
+            System.out.println(this.state.getLastApplied() + " getLastApplied :  " +  this.state.getLastLogIndex() + " : getLastLogIndex");
             if (this.state.getLastApplied() < this.state.getLastLogIndex()) {
                 // check for majority now!
                 int i = 0, majority = 1;
@@ -267,21 +267,23 @@ public class Server {
                     this.state.setLastApplied(this.state.getLastLogIndex());
                     // apply snapshot
                     this.state.getEntries().addAll(this.state.getSnapshot());
-                    int size = (int) (this.state.getLastLogIndex() + this.state.getSnapshot().size());
-//                    if(this.state.getLastLogIndex() == 0){
+//                    int size = (int) (this.state.getLastLogIndex() + this.state.getSnapshot().size());
+//                    if(this.state.getLastLogIndex() > 0){
 //                        if(this.state.getSnapshot().size() > 0) size -= 1;
 //                    }
-                    this.state.setLastLogIndex(size);
+//                    this.state.setLastLogIndex(size);
+                    this.state.setLastLogIndex(this.state.getEntries().size() - 1);
+
                     logAppendRetries = 0;
                     this.state.getSnapshot().clear();
                 }
             } else {
                 this.state.getEntries().addAll(this.state.getSnapshot());
-                int size = (int) (this.state.getLastLogIndex() + this.state.getSnapshot().size());
-//                if(this.state.getLastLogIndex() == 0){
+//                int size = (int) (this.state.getLastLogIndex() + this.state.getSnapshot().size());
+//                if(this.state.getLastLogIndex() > 0){
 //                    if(this.state.getSnapshot().size() > 0) size -= 1;
 //                }
-                this.state.setLastLogIndex(size);
+                this.state.setLastLogIndex(this.state.getEntries().size() - 1);
                 this.state.getSnapshot().clear();
             }
             System.out.println("[initiateHeartbeatRPC] Snapshot :: "+ this.state.getSnapshot());
@@ -324,8 +326,8 @@ public class Server {
                 requestBuilder.setLastAppendedLogIndex(0);
                 requestBuilder.setLastAppendedLogTerm(-1);
             } else {
-                requestBuilder.setLastAppendedLogIndex(this.state.getEntries().get((int) this.state.getLastApplied()).getTerm());
-                requestBuilder.setLastAppendedLogIndex(this.state.getLastApplied());
+                requestBuilder.setLastAppendedLogTerm((this.state.getEntries().get((int) peerMatchIndex)).getTerm());
+                requestBuilder.setLastAppendedLogIndex(peerMatchIndex);
             }
 
             requestBuilder.setTerm(currentTerm); // Is this correct ?
@@ -341,6 +343,8 @@ public class Server {
                 entryToSend.add(entries.get((int) i));
             }
             requestBuilder.addAllEntries(entryToSend);
+            //requestBuilder.setLeaderLastAppliedIndex(this.state.getLastApplied());
+
             System.out.println("[sendAppendEntries] Final Request :: "+ requestBuilder.toString());
         } catch (Exception e) {
             e.printStackTrace();
