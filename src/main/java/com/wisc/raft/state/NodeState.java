@@ -22,13 +22,23 @@ public class NodeState {
     // volatile state on all servers
     private long commitIndex;    // index of highest log entry known to be commited 
     private long lastApplied;    // index of highest log entry applied to state machine
-    private long lastLongIndex;  // index of last log entry
+    private long lastLogIndex;  // index of last log entry
     //volatile state on leaders
     private List<Integer> nextIndex;    // for each server, index of next log entry to send to a particular server
                                         // initialized to leader logIndex+1
     private List<Integer> matchIndex;    // for each server, index of highest log entry known to be replicated on that particular server
                                         // initialized to 0
     private long leaderTerm;
+
+    public long getLastLeaderCommitIndex() {
+        return lastLeaderCommitIndex;
+    }
+
+    public void setLastLeaderCommitIndex(long lastLeaderCommitIndex) {
+        this.lastLeaderCommitIndex = lastLeaderCommitIndex;
+    }
+
+    private long lastLeaderCommitIndex;
 
     private long heartbeatTrackerTime;
     public int getTotalVotes() {
@@ -69,6 +79,7 @@ public class NodeState {
         this.nodeId = nodeId;
 
         this.heartbeatTrackerTime = 0;
+        this.lastLogIndex = 0;
     }
     public long getCurrentTerm() {
         return currentTerm;

@@ -24,14 +24,17 @@ public class ServerClientConnectionService extends ServerClientConnectionGrpc.Se
         if (this.server.getState().getNodeType() != Role.LEADER) {
             System.out.println("Cant perform action as this is not leader!!");
             res.onNext(response);
+            res.onCompleted();
         }
-//        else if(commandType.equals(CommandType.GET)){
-//            long ret = server.get(key);
-//            if(ret != -1){
-//                response = Client.Response.newBuilder().setSuccess(true).setValue(ret).build();
-//            }
-//        }
 
+        else if(commandType.equals("GET")){
+            long ret = this.server.getValue(key);
+            if(ret != -1){
+                response = Client.Response.newBuilder().setSuccess(true).setValue(ret).build();
+            }
+
+        }
+        res.onNext(response);
         res.onCompleted();
 
 
@@ -45,14 +48,19 @@ public class ServerClientConnectionService extends ServerClientConnectionGrpc.Se
         long val = request.getValue();
         String commandType = request.getCommandType();
         Client.Response response = Client.Response.newBuilder().setSuccess(false).setValue(-1).build();
+        //Should we lock ?
+        if (this.server.getState().getNodeType() != Role.LEADER) {
+            System.out.println("Cant perform action as this is not leader!!");
+            res.onNext(response);
+            res.onCompleted();
+        }
 
-        //This shouldn't work
-//        if(commandType.equals(CommandType.PUT) || commandType.equals(CommandType.HEARTBEAT)){
-//            int ret = server.put(key, val);
-//            if(ret != -1){
-//                response = Client.Response.newBuilder().setSuccess(true).setValue(ret).build();
-//            }
-//        }
+        if(commandType.equals("PUT")){
+            int ret = server.putValue(key, val);
+            if(ret != -1){
+                response = Client.Response.newBuilder().setSuccess(true).setValue(ret).build();
+            }
+        }
         res.onNext(response);
         res.onCompleted();
 

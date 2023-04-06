@@ -30,14 +30,15 @@ message LogEntry {
   optional uint64 term = 1;
   optional string index = 2;
   optional Command command = 3;
+  optional string requestId = 4;
   
 };
 
 message AppendEntriesRequest {
   optional string leaderId = 1;
   optional uint64 term = 2;
-  optional uint64 prevLogIndex = 3;
-  optional uint64 prevLogTerm = 4;
+  optional uint64 lastAppendedLogIndex = 3;
+  optional uint64 lastAppendedLogTerm = 4;
   optional uint64 commitIndex = 5;
   repeated LogEntry entries = 6;
   optional uint64 indexTracked = 7;
