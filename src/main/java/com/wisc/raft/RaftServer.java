@@ -31,7 +31,7 @@ public class RaftServer {
             serverList.add(server);
         }
 
-        Server raftServer = new Server(args[0]);
+        Server raftServer = new Server(args[0], database);
         raftServer.setCluster(serverList);
         //ServerClientConnectionService clientConnectionService = new ServerClientConnectionService(raftServer);
         RaftConsensusService raftConsensusService = new RaftConsensusService(raftServer);

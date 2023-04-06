@@ -66,8 +66,9 @@ public class Server {
 
     private RaftConsensusService raftConsensusService;
 
-    public Server(String nodeId) {
+    public Server(String nodeId, Database db) {
         this.state = new NodeState(nodeId);
+        this.db = db;
     }
 
     public void init() {
