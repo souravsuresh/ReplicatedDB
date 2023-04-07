@@ -159,9 +159,9 @@ public class Server {
             if (this.state.getNodeType().equals(Role.LEADER)) {
                 System.out.println("[initiateElectionRPC]  Already a leader! So not participating in Election!");
                 //@TODO :: remove this once client code is up
-                for(int i=0;i<1;i++){
-                    this.state.getSnapshot().add(Raft.LogEntry.newBuilder().setCommand(Raft.Command.newBuilder().setValue(random.nextInt(10)).setKey(random.nextInt(10)).build()).setTerm(this.state.getCurrentTerm()).setIndex("Bolimaga").build());
-                }
+//                for(int i=0;i<1;i++){
+//                    this.state.getSnapshot().add(Raft.LogEntry.newBuilder().setCommand(Raft.Command.newBuilder().setValue(random.nextInt(10)).setKey(random.nextInt(10)).build()).setTerm(this.state.getCurrentTerm()).setIndex("Bolimaga").build());
+//                }
                 return;
             }
             if (!Objects.isNull(this.state.getVotedFor()) && this.state.getNodeType().equals(Role.FOLLOWER)) {
