@@ -41,7 +41,7 @@ public class ServerClientConnectionService extends ServerClientConnectionGrpc.Se
             }
             else{
 
-                Optional<Raft.ServerConnect> leaderOpt = this.server.getCluster().stream().filter(serv -> serv.getServerId() != Integer.parseInt(this.server.getState().getVotedFor())).findAny();
+                Optional<Raft.ServerConnect> leaderOpt = this.server.getCluster().stream().filter(serv -> serv.getServerId() == Integer.parseInt(this.server.getState().getVotedFor())).findAny();
                 if (leaderOpt.isPresent()) {
                     System.out.println("[getLeader] : FOLLOWER : " + leaderOpt.get());
 
