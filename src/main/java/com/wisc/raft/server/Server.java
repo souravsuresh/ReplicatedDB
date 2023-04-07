@@ -175,7 +175,7 @@ public class Server {
             this.state.setCurrentTerm(this.state.getCurrentTerm() + 1);
             requestBuilder.setCandidateId(this.state.getNodeId());
             requestBuilder.setTerm(this.state.getCurrentTerm());
-            long lastLogTerm = this.state.getLastApplied() == 0 ? -1 : this.state.getEntries().get((int)this.state.getLastApplied()).getTerm();
+            long lastLogTerm = this.state.getLastApplied() == -1 ? -1 : this.state.getEntries().get((int)this.state.getLastApplied()).getTerm();
             requestBuilder.setLeaderLastAppliedTerm(lastLogTerm);
             requestBuilder.setLeaderLastAppliedIndex(this.state.getLastApplied());
             this.state.setTotalVotes(1);
@@ -199,9 +199,10 @@ public class Server {
         System.out.println("[RequestVoteWrapper] Inside requestVote for endpoint :: " + endpoint.getPort());
 
         ManagedChannel channel = ManagedChannelBuilder.forAddress(endpoint.getHost(), endpoint.getPort()).usePlaintext().build();
-        System.out.println("[RequestVoteWrapper] Channel state :: " + channel.getState(true) + " :: " + channel.getState(false));
-        System.out.println("[RequestVoteWrapper] Sent voting req : " + request.getCandidateId());
         try {
+
+            System.out.println("[RequestVoteWrapper] Channel state :: " + channel.getState(true) + " :: " + channel.getState(false));
+            System.out.println("[RequestVoteWrapper] Sent voting req : " + request.getCandidateId());
             RaftServiceGrpc.RaftServiceBlockingStub raftServiceBlockingStub = RaftServiceGrpc.newBlockingStub(channel);
             Raft.ResponseVote responseVote = raftServiceBlockingStub.requestVotes(request);
             if (responseVote.getGrant()) {
@@ -215,6 +216,10 @@ public class Server {
                         this.state.setHeartbeatTrackerTime(System.currentTimeMillis());
                         this.state.setNodeType(Role.LEADER);
                     }
+                    System.out.println("[RequestVoteWrapper] Before state of "+server.getEndpoint()+" Match index :: "+ this.state.getMatchIndex().get(server.getServerId()) + " Next Index :: "+ this.state.getNextIndex().get(server.getServerId()));
+                    this.state.getNextIndex().set(server.getServerId(), (int) responseVote.getCandidateLastLogIndex());
+                    this.state.getMatchIndex().set(server.getServerId(), (int) responseVote.getCandidateLastAppliedLogIndex());
+                    System.out.println("[RequestVoteWrapper] After state of "+server.getEndpoint()+" Match index :: "+ this.state.getMatchIndex().get(server.getServerId()) + " Next Index :: "+ this.state.getNextIndex().get(server.getServerId()));
                     System.out.println("[RequestVoteWrapper] Number of Votes : " + this.state.getTotalVotes());
                 } finally {
                     lock.unlock();
@@ -224,6 +229,8 @@ public class Server {
             }
         }catch (Exception ex) {
                 System.out.println("[RequestVoteWrapper] Server might not be up!! "+ ex);
+        } finally{
+            channel.shutdown();
         }
 
 
@@ -267,11 +274,6 @@ public class Server {
                     this.state.setLastApplied(this.state.getLastLogIndex());
                     // apply snapshot
                     this.state.getEntries().addAll(this.state.getSnapshot());
-//                    int size = (int) (this.state.getLastLogIndex() + this.state.getSnapshot().size());
-//                    if(this.state.getLastLogIndex() > 0){
-//                        if(this.state.getSnapshot().size() > 0) size -= 1;
-//                    }
-//                    this.state.setLastLogIndex(size);
                     this.state.setLastLogIndex(this.state.getEntries().size() - 1);
 
                     logAppendRetries = 0;
@@ -279,10 +281,6 @@ public class Server {
                 }
             } else {
                 this.state.getEntries().addAll(this.state.getSnapshot());
-//                int size = (int) (this.state.getLastLogIndex() + this.state.getSnapshot().size());
-//                if(this.state.getLastLogIndex() > 0){
-//                    if(this.state.getSnapshot().size() > 0) size -= 1;
-//                }
                 this.state.setLastLogIndex(this.state.getEntries().size() - 1);
                 this.state.getSnapshot().clear();
             }
@@ -351,16 +349,14 @@ public class Server {
             System.out.println("[sendAppendEntries] ex : "+ e);
         }
 
-        // @CHECK :: Snapshot might mess this up!! Possibility is this.state.term
-        //Check last match Index and send everything from there to current irrespective if it is HB
         System.out.println("[sendAppendEntries] : before call : " + server.getServerId());
         Raft.Endpoint endpoint = server.getEndpoint();
         ManagedChannel channel = ManagedChannelBuilder.forAddress(endpoint.getHost(), endpoint.getPort()).usePlaintext().build();
-        RaftServiceGrpc.RaftServiceBlockingStub raftServiceBlockingStub = RaftServiceGrpc.newBlockingStub(channel);
-        Raft.AppendEntriesResponse response = raftServiceBlockingStub.appendEntries(requestBuilder.build());
 
         lock.lock();
         try {
+            RaftServiceGrpc.RaftServiceBlockingStub raftServiceBlockingStub = RaftServiceGrpc.newBlockingStub(channel);
+            Raft.AppendEntriesResponse response = raftServiceBlockingStub.appendEntries(requestBuilder.build());
             boolean success = response.getSuccess();
             if(this.state.getCurrentTerm() < response.getTerm()){
                 this.state.setNodeType(Role.FOLLOWER);
@@ -378,7 +374,7 @@ public class Server {
                 }
 
                 if (term == -4) {
-                    System.out.println("We have different term is not corrected : self correct Ig");
+                    System.out.println("We have different term is not corrected : self correct");
                 }
             } else {
                 System.out.println("[sendAppendEntries] Post Response");
@@ -389,6 +385,7 @@ public class Server {
             System.out.println("[sendAppendEntries] after response ex : " + e);
         } finally {
             lock.unlock();
+            channel.shutdown();
         }
     }
 

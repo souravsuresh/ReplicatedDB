@@ -18,7 +18,7 @@ public class RaftServer {
     public static void main(String[] args) throws IOException, InterruptedException {
         System.out.println("[RaftServer] Starting the main server!!");
         // @TODO :: Take the server ids and command line args
-        Database database = new Database("/Users/varun/Documents/cs749/769up/ReplicatedDB/src/main/resources/leveldb");
+        Database database = new Database("./leveldb");
 
         List<Raft.ServerConnect> serverList = new ArrayList<>();
         for (int i=2;i<args.length;i++) {
@@ -35,7 +35,7 @@ public class RaftServer {
         raftServer.setCluster(serverList);
         //ServerClientConnectionService clientConnectionService = new ServerClientConnectionService(raftServer);
         RaftConsensusService raftConsensusService = new RaftConsensusService(raftServer);
-
+//        System.out.println("[Sys Args] "+args.toString());
         // @TODO: RPC initalization etc , change this name
         io.grpc.Server server = ServerBuilder.forPort(Integer.parseInt(args[1])).addService(raftConsensusService).build();
 

@@ -41,8 +41,9 @@ public class RaftConsensusService extends RaftServiceGrpc.RaftServiceImplBase {
                 return;
             }
 
-            long lastLogTerm = this.server.getState().getLastApplied() == 0 ? -1 : this.server.getState().getEntries().get((int)this.server.getState().getLastApplied()).getTerm();
+            long lastLogTerm = this.server.getState().getLastApplied() == -1 ? -1 : this.server.getState().getEntries().get((int)this.server.getState().getLastApplied()).getTerm();
 
+            long lastLogIndex = this.server.getState().getLastApplied() == 0 ? -1 : this.server.getState().getLastApplied();
 
             if(request.getLeaderLastAppliedTerm()  < lastLogTerm || request.getLeaderLastAppliedIndex() < this.server.getState().getLastApplied()){
                 System.out.println("[RequestVoteService] You have bigger Term or more entries than the pot. leader " + " Leader Term : " + request.getLeaderLastAppliedTerm() + " My Term : " + lastLogTerm);
@@ -58,15 +59,14 @@ public class RaftConsensusService extends RaftServiceGrpc.RaftServiceImplBase {
 
                 // set the current term to the candidates term
                 this.server.getState().setCurrentTerm(request.getTerm());
-
-                // @Check :: whether we need to add node UUID here?
                 this.server.getState().setVotedFor(request.getCandidateId());
 
                 System.out.println("[RequestVoteService] I voted for ::" + this.server.getState().getVotedFor());
                 this.server.getState().setNodeType(Role.FOLLOWER);  // @TODO if this guy is voting ideally he should step down
                 responseBuilder.setGrant(true);
                 responseBuilder.setTerm(this.server.getState().getCurrentTerm());
-
+                responseBuilder.setCandidateLastLogIndex(this.server.getState().getLastLogIndex());
+                responseBuilder.setCandidateLastAppliedLogIndex(this.server.getState().getLastApplied());
                 //responseBuilder.setCandidateLastAppliedTerm(this.server.getState().getEntries())
 
                 System.out.println("RequestVoteService] Successfuly voted! Current Leader :: " +
@@ -137,20 +137,6 @@ public class RaftConsensusService extends RaftServiceGrpc.RaftServiceImplBase {
                     return;
                 }
 
-//                int i;
-//                for (i = 0; i < leaderEntries.size(); i++) {
-//                    if (indexTracked < currentEntries.size()) {
-//                        if (leaderEntries.get(i).getTerm() == currentEntries.get(indexTracked).getTerm()) {
-//                            indexTracked++;
-//
-//                        }
-//                    } else {
-//                        this.server.getState().getEntries().add(leaderEntries.get(i));
-//                        indexTracked++;
-//
-//                    }
-//
-//                }
                 if(this.server.getState().getEntries().size() > (int) request.getLastAppendedLogIndex() + 1) {
                     this.server.getState().getEntries().subList((int) request.getLastAppendedLogIndex() + 1, this.server.getState().getEntries().size()).clear();
                 }
