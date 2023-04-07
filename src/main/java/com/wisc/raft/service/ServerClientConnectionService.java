@@ -46,7 +46,7 @@ public class ServerClientConnectionService extends ServerClientConnectionGrpc.Se
                     System.out.println("[getLeader] : FOLLOWER : " + leaderOpt.get());
 
                     Raft.ServerConnect serverConnect = leaderOpt.get();
-                    Client.MetaDataResponse metaDataResponse = metaDataResponseBuilder.setServerId(serverConnect.getServerId()).setPort(serverConnect.getEndpoint().getPort()).setHost(serverConnect.getEndpoint().getHost()).build();
+                    Client.MetaDataResponse metaDataResponse = metaDataResponseBuilder.setServerId(serverConnect.getServerId()).setPort(serverConnect.getEndpoint().getPort()).setHost(serverConnect.getEndpoint().getHost()).setSuccess(true).build();
                     res.onNext(metaDataResponse);
                     res.onCompleted();
                 }
