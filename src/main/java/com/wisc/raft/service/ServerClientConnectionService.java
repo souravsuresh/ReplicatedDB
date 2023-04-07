@@ -100,6 +100,7 @@ public class ServerClientConnectionService extends ServerClientConnectionGrpc.Se
         }
 
         if(commandType.equals("PUT")){
+            System.out.println("[put] Can perform ");
             int ret = server.putValue(key, val);
             if(ret != -1){
                 response = Client.Response.newBuilder().setSuccess(true).setValue(ret).build();

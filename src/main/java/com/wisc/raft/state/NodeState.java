@@ -70,7 +70,6 @@ public class NodeState {
         totalVotes = 0;
         this.commitIndex = 0;   
         this.lastApplied = -1;       // @CHECK :: should be -1
-        this.lastLogIndex = 0;
 
         this.nextIndex = new ArrayList<>();
         this.matchIndex = new ArrayList<>();

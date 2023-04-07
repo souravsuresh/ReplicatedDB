@@ -24,8 +24,10 @@ public class ClientMachine {
             if (metaDataResponse.getSuccess()) {
                 leaderHost = metaDataResponse.getHost();
                 leaderPort = metaDataResponse.getPort();
+                System.out.println(leaderHost + " L: " + leaderPort);
                 break;
             } else {
+                System.out.println("Going to sleep :"  + metaDataResponse);
                 sleep(500);
             }
         }
@@ -66,7 +68,7 @@ public class ClientMachine {
                     Client.Response response = serverClientConnectionBlockingStubLeader.get(request);
                     if (response.getSuccess()) {
                         count++;
-                        System.out.println("Accepted : " + response.getValue() == val +  " response :  " + response.getValue() + " act val: " + val);
+                        System.out.println("Accepted : " + (response.getValue() == val) +  " response :  " + response.getValue() + " act val: " + val);
 
                     } else {
                         System.out.println("Failed : " + key);

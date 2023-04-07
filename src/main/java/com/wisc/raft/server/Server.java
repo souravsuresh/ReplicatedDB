@@ -81,6 +81,7 @@ public class Server {
             matchIndex.add(-1);
             nextIndex.add(0);
         });
+        persistentStore = new HashMap<>();
         this.state.setNextIndex(nextIndex);
         this.state.setMatchIndex(matchIndex);
         //TODO : Change these details via configuration
