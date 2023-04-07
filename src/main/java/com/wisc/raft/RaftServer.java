@@ -4,6 +4,7 @@ import com.wisc.raft.proto.Raft;
 import com.wisc.raft.server.Server;
 import com.wisc.raft.service.Database;
 import com.wisc.raft.service.RaftConsensusService;
+import com.wisc.raft.service.ServerClientConnectionService;
 import io.grpc.ServerBuilder;
 import lombok.extern.slf4j.Slf4j;
 
@@ -33,11 +34,11 @@ public class RaftServer {
 
         Server raftServer = new Server(args[0], database);
         raftServer.setCluster(serverList);
-        //ServerClientConnectionService clientConnectionService = new ServerClientConnectionService(raftServer);
+        ServerClientConnectionService clientConnectionService = new ServerClientConnectionService(raftServer);
         RaftConsensusService raftConsensusService = new RaftConsensusService(raftServer);
 
         // @TODO: RPC initalization etc , change this name
-        io.grpc.Server server = ServerBuilder.forPort(Integer.parseInt(args[1])).addService(raftConsensusService).build();
+        io.grpc.Server server = ServerBuilder.forPort(Integer.parseInt(args[1])).addService(raftConsensusService).addService(clientConnectionService).build();
 
         //Start the server
         raftServer.init();

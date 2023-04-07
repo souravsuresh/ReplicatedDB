@@ -8,6 +8,7 @@ package org.wisc.raft.proto;
 service ServerClientConnection{
   rpc Get(Request) returns (Response);
   rpc Put(Request) returns (Response);
+  rpc GetLeader(MetaDataRequest) returns(MetaDataResponse);
 };
 
 message Request {
@@ -20,3 +21,14 @@ message Response {
     uint64 value = 1;
     bool success = 2;
 };
+
+message MetaDataRequest{
+  string reqType = 1;
+}
+
+message MetaDataResponse{
+  optional string host = 1;
+  optional uint32 port = 2;
+  optional uint32 server_id = 3;
+  optional bool success = 4;
+}
