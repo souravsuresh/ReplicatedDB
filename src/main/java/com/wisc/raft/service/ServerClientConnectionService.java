@@ -7,6 +7,7 @@ import io.grpc.stub.StreamObserver;
 import org.wisc.raft.proto.Client;
 import org.wisc.raft.proto.ServerClientConnectionGrpc;
 
+import java.util.Objects;
 import java.util.Optional;
 
 public class ServerClientConnectionService extends ServerClientConnectionGrpc.ServerClientConnectionImplBase{
@@ -26,12 +27,12 @@ public class ServerClientConnectionService extends ServerClientConnectionGrpc.Se
                 Optional<Raft.ServerConnect> leaderOpt = this.server.getCluster().stream().filter(serv -> serv.getServerId() != Integer.parseInt(this.server.getState().getNodeId())).findAny();
                 if (leaderOpt.isPresent()) {
                     Raft.ServerConnect serverConnect = leaderOpt.get();
-                    Client.MetaDataResponse metaDataResponse = metaDataResponseBuilder.setServerId(serverConnect.getServerId()).setPort(serverConnect.getEndpoint().getPort()).setHost(serverConnect.getEndpoint().getHost()).build();
+                    Client.MetaDataResponse metaDataResponse = metaDataResponseBuilder.setServerId(serverConnect.getServerId()).setPort(serverConnect.getEndpoint().getPort()).setHost(serverConnect.getEndpoint().getHost()).setSuccess(true).build();
                     res.onNext(metaDataResponse);
                     res.onCompleted();
                 }
             }
-            else if(this.server.getState().getNodeType().equals(Role.CANDIDATE)){
+            else if(this.server.getState().getNodeType().equals(Role.CANDIDATE) || Objects.isNull(this.server.getState().getVotedFor())){
                 System.out.println("[getLeader] : Election going on - Don't disturb");
                 Client.MetaDataResponse metaDataResponse = metaDataResponseBuilder.setSuccess(false).build();
                 res.onNext(metaDataResponse);
@@ -42,6 +43,12 @@ public class ServerClientConnectionService extends ServerClientConnectionGrpc.Se
                 if (leaderOpt.isPresent()) {
                     Raft.ServerConnect serverConnect = leaderOpt.get();
                     Client.MetaDataResponse metaDataResponse = metaDataResponseBuilder.setServerId(serverConnect.getServerId()).setPort(serverConnect.getEndpoint().getPort()).setHost(serverConnect.getEndpoint().getHost()).build();
+                    res.onNext(metaDataResponse);
+                    res.onCompleted();
+                }
+                else{
+                    System.out.println("[getLeader] some config issue : " + this.server.getState().getVotedFor());
+                    Client.MetaDataResponse metaDataResponse = metaDataResponseBuilder.setSuccess(false).build();
                     res.onNext(metaDataResponse);
                     res.onCompleted();
                 }
