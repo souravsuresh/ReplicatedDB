@@ -1,5 +1,6 @@
 package com.wisc.raft.server;
 
+import com.wisc.raft.RaftServer;
 import com.wisc.raft.constants.Role;
 import com.wisc.raft.proto.Raft;
 import com.wisc.raft.proto.RaftServiceGrpc;
@@ -11,6 +12,10 @@ import io.grpc.ManagedChannelBuilder;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.wisc.raft.proto.Client;
+import org.wisc.raft.proto.ServerClientConnectionGrpc;
 
 import java.util.*;
 import java.util.concurrent.*;
@@ -21,12 +26,18 @@ import java.util.concurrent.locks.ReentrantLock;
 @Getter
 @Setter
 public class Server {
+    private static final Logger logger =  LoggerFactory.getLogger(RaftServer.class);
+
     private static final Random random = new Random();
     private static final long ELECTION_TIMEOUT_INTERVAL = 100;  //100ms
     private static final long HEARTBEAT_TIMEOUT_INTERVAL = 80;  //80ms
     private static final long MAX_REQUEST_RETRY = 3;  // retry requests for 3 times
 
+    private static long termIncreaseInterval = 3;  // retry requests for 3 times
+
+
     private static long logAppendRetries = 0;
+    private static long rejectionRetries = 0;
     // @TODO: for now maintaining HashMap!! Update this to db updates
     private HashMap<Long, Long> kvStore = new HashMap<>();
     private NodeState state;
@@ -37,16 +48,27 @@ public class Server {
     private ScheduledExecutorService heartbeatExecutorService;
     private ScheduledExecutorService commitSchedulerService;
 
+    private ScheduledExecutorService replySchedulerService;
+
+
 
     private ScheduledFuture electionScheduler;
     private ScheduledFuture heartBeatScheduler;
 
     private ScheduledFuture commitScheduler;
 
+    private ScheduledFuture replyScheduler;
+
+
     private ThreadPoolExecutor electionExecutor;
     private ThreadPoolExecutor heartBeatExecutor;
 
     private ThreadPoolExecutor commitExecutor;
+
+    private ThreadPoolExecutor replyExecutor;
+
+
+
 
 
     private ExecutorService appendEntriesExecutor;
@@ -62,7 +84,10 @@ public class Server {
 
     private Database db;
 
-    private Map<String, Boolean> persistentStore;
+    private ManagedChannel clientChannel;
+
+    private ServerClientConnectionGrpc.ServerClientConnectionBlockingStub serverClientConnectionBlockingStub;
+    private ConcurrentHashMap<String, Boolean> persistentStore;
 
     private RaftConsensusService raftConsensusService;
 
@@ -71,27 +96,33 @@ public class Server {
         this.db = db;
     }
 
-    public void init() {
+    public void init(String clientHost, int port) {
         lock = new ReentrantLock();
         //db = new Database();
         List<Integer> matchIndex = new ArrayList<>();
         List<Integer> nextIndex = new ArrayList<>();
-        System.out.println("Cluster size : " + cluster.size());
+        logger.info("Cluster size : " + cluster.size());
         cluster.stream().forEach(serv -> {
             matchIndex.add(-1);
             nextIndex.add(0);
         });
-        persistentStore = new HashMap<>();
+        clientChannel = ManagedChannelBuilder.forAddress(clientHost, port).usePlaintext().build();
+        serverClientConnectionBlockingStub = ServerClientConnectionGrpc.newBlockingStub(clientChannel);
+
+        persistentStore = new ConcurrentHashMap<>();
         this.state.setNextIndex(nextIndex);
         this.state.setMatchIndex(matchIndex);
         //TODO : Change these details via configuration
         Runnable initiateElectionRPCRunnable = () -> initiateElectionRPC();
         Runnable initiateHeartbeatRPCRunnable = () -> initiateHeartbeatRPC();
         Runnable initiateElectionExecutorRunnable = () -> initiateCommitScheduleRPC();
+        Runnable replyClientExecutorRunnable = () -> initiateReplyScheduleRPC();
         this.electionExecutor = new ThreadPoolExecutor(cluster.size(), cluster.size(), 60, TimeUnit.SECONDS, new LinkedBlockingQueue<Runnable>());
         this.heartBeatExecutor = new ThreadPoolExecutor(cluster.size(), cluster.size(), 60, TimeUnit.SECONDS, new LinkedBlockingQueue<Runnable>());
         electionExecutorService = Executors.newSingleThreadScheduledExecutor();
         commitSchedulerService = Executors.newSingleThreadScheduledExecutor();
+        replySchedulerService = Executors.newSingleThreadScheduledExecutor();
+        replyScheduler = replySchedulerService.scheduleAtFixedRate(replyClientExecutorRunnable,20, 30, TimeUnit.SECONDS);
         commitScheduler = commitSchedulerService.scheduleAtFixedRate(initiateElectionExecutorRunnable, 1, 10, TimeUnit.SECONDS);
         electionScheduler = electionExecutorService.scheduleAtFixedRate(initiateElectionRPCRunnable, 1, 5, TimeUnit.SECONDS);
         // electionScheduler = electionExecutorService.scheduleAtFixedRate(initiateElectionRPCRunnable, 1L, (long) (100 + random.nextDouble() * ELECTION_TIMEOUT_INTERVAL), TimeUnit.SECONDS);
@@ -99,20 +130,31 @@ public class Server {
         heartBeatScheduler = heartbeatExecutorService.scheduleAtFixedRate(initiateHeartbeatRPCRunnable, 5, 2, TimeUnit.SECONDS);
     }
 
+    private void initiateReplyScheduleRPC(){
+        //Get entries which are true;
+
+        for (String reqId : persistentStore.keySet()) {
+            if(persistentStore.get(reqId) != null){
+                this.serverClientConnectionBlockingStub.talkBack(Client.StatusUpdate.newBuilder().setReqId(reqId).setReturnVal(persistentStore.get(reqId)).build());
+                persistentStore.remove(reqId);
+            }
+
+        }
+    }
     private void initiateCommitScheduleRPC(){
         lock.lock();
         try {
             if (this.state.getNodeType() == Role.LEADER) {
                 if(this.state.getCommitIndex() <= this.state.getLastApplied() &&  this.state.getCommitIndex() <= this.state.getEntries().size() && this.state.getLastApplied() <=  this.state.getEntries().size()){
                     long index = this.state.getCommitIndex();
-                    System.out.println("[CommitSchedule] inside leader commit starting from " + index + 1 + " to "+ this.state.getLastApplied());
+                    logger.debug("[CommitSchedule] inside leader commit starting from " + index + 1 + " to "+ this.state.getLastApplied());
                     for(long i = index+1; i<=this.state.getLastApplied(); i++){
                         int ret = db.commit(this.state.getEntries().get((int) i));
                         if(ret == -1){
-                            System.out.println("[CommitSchedule] Failed but no issues");
+                            logger.warn("[CommitSchedule] Failed but no issues");
                         }
                         else{
-                            System.out.println("[CommitSchedule] Commited successfully :: "+i);
+                            logger.debug("[CommitSchedule] Commited successfully :: "+i);
                         }
                         this.persistentStore.put(this.state.getEntries().get((int) i).getRequestId(), true);
                         this.state.setCommitIndex(this.state.getCommitIndex() + 1);
@@ -121,7 +163,7 @@ public class Server {
             }
             else{
                 if(this.state.getCommitIndex() > this.state.getLastLeaderCommitIndex()){
-                    System.out.println("[CommitSchedule] Your commit index :: " + this.state.getCommitIndex() + " is more than leader commit index :: "+this.state.getLastLeaderCommitIndex());
+                    logger.warn("[CommitSchedule] Your commit index :: " + this.state.getCommitIndex() + " is more than leader commit index :: "+this.state.getLastLeaderCommitIndex());
                     return;
                 }
                 if(this.state.getCommitIndex() <= this.state.getLastLeaderCommitIndex()  && this.state.getCommitIndex() < this.state.getEntries().size() && this.state.getLastLeaderCommitIndex() < this.state.getEntries().size()){
@@ -129,18 +171,18 @@ public class Server {
                     for(long i=index+1;i<=this.state.getLastLeaderCommitIndex();i++){
                         int ret = db.commit(this.state.getEntries().get((int) i));
                         if(ret == -1){
-                            System.out.println("[CommitSchedule] Failed but no issues");
+                            logger.warn("[CommitSchedule] Failed but no issues");
                         }
                         else{
-                            System.out.println("[CommitSchedule] Commited successfully :: "+i);
+                            logger.debug("[CommitSchedule] Commited successfully :: "+i);
                         }
-                        this.persistentStore.put(this.state.getEntries().get((int) i).getRequestId(), true);
+                        this.persistentStore.put(this.state.getEntries().get((int) i).getRequestId(), ret != -1);
                         this.state.setCommitIndex(this.state.getCommitIndex() + 1);
                     }
                 }
             }
         } catch (Exception ex) {
-            System.out.println("[CommitSchedule] Oops got a intresting exception:: "+ex);
+            logger.error("[CommitSchedule] Oops got a intresting exception:: "+ex);
         }
         finally {
             lock.unlock();
@@ -148,17 +190,17 @@ public class Server {
     }
     public void initiateElectionRPC() {
         Raft.RequestVote.Builder requestBuilder = Raft.RequestVote.newBuilder();
-        System.out.println("Starting election at :: "+ System.currentTimeMillis());
+        logger.debug("Starting election at :: "+ System.currentTimeMillis());
         lock.lock();
         try {
-            System.out.println("[initiateElectionRPC] Current time :: " + System.currentTimeMillis() + " HeartBeat timeout time :: " +  (this.state.getHeartbeatTrackerTime() + 5 * 1000 * MAX_REQUEST_RETRY));
+            logger.debug("[initiateElectionRPC] Current time :: " + System.currentTimeMillis() + " HeartBeat timeout time :: " +  (this.state.getHeartbeatTrackerTime() + 5 * 1000 * MAX_REQUEST_RETRY));
             if(this.state.getHeartbeatTrackerTime() != 0 && System.currentTimeMillis() > (this.state.getHeartbeatTrackerTime() +  5 * 1000 * MAX_REQUEST_RETRY) ) {
-                System.out.println("[initiateElectionRPC] Stepping down as follower");
+                logger.debug("[initiateElectionRPC] Stepping down as follower");
                 this.state.setVotedFor(null);
                 this.state.setNodeType(Role.FOLLOWER);
             }
             if (this.state.getNodeType().equals(Role.LEADER)) {
-                System.out.println("[initiateElectionRPC]  Already a leader! So not participating in Election!");
+                logger.debug("[initiateElectionRPC]  Already a leader! So not participating in Election!");
                 //@TODO :: remove this once client code is up
 //                for(int i=0;i<1;i++){
 //                    this.state.getSnapshot().add(Raft.LogEntry.newBuilder().setCommand(Raft.Command.newBuilder().setValue(random.nextInt(10)).setKey(random.nextInt(10)).build()).setTerm(this.state.getCurrentTerm()).setIndex("Bolimaga").build());
@@ -166,11 +208,11 @@ public class Server {
                 return;
             }
             if (!Objects.isNull(this.state.getVotedFor()) && this.state.getNodeType().equals(Role.FOLLOWER)) {
-                System.out.println("[initiateElectionRPC]  Already voted ! So not participating in Election! : " + this.state.getVotedFor());
+                logger.debug("[initiateElectionRPC]  Already voted ! So not participating in Election! : " + this.state.getVotedFor());
                 return;
             }
 
-            System.out.println("[initiateElectionRPC] Starting the voting process");
+            logger.debug("[initiateElectionRPC] Starting the voting process");
             this.state.setVotedFor(this.state.getNodeId());
             this.state.setNodeType(Role.CANDIDATE);
             this.state.setCurrentTerm(this.state.getCurrentTerm() + 1);
@@ -182,7 +224,7 @@ public class Server {
             this.state.setTotalVotes(1);
         }
         catch(Exception e){
-            System.out.println(e);
+            logger.error("Initiate RPC before request error " + e);
         }
         finally {
             lock.unlock();
@@ -197,13 +239,13 @@ public class Server {
 
     private void requestVote(Raft.RequestVote request, Raft.ServerConnect server) {
         Raft.Endpoint endpoint = server.getEndpoint();
-        System.out.println("[RequestVoteWrapper] Inside requestVote for endpoint :: " + endpoint.getPort());
+        logger.error("[RequestVoteWrapper] Inside requestVote for endpoint :: " + endpoint.getPort());
 
         ManagedChannel channel = ManagedChannelBuilder.forAddress(endpoint.getHost(), endpoint.getPort()).usePlaintext().build();
         try {
 
-            System.out.println("[RequestVoteWrapper] Channel state :: " + channel.getState(true) + " :: " + channel.getState(false));
-            System.out.println("[RequestVoteWrapper] Sent voting req : " + request.getCandidateId());
+            logger.error("[RequestVoteWrapper] Channel state :: " + channel.getState(true) + " :: " + channel.getState(false));
+            logger.error("[RequestVoteWrapper] Sent voting req : " + request.getCandidateId());
             RaftServiceGrpc.RaftServiceBlockingStub raftServiceBlockingStub = RaftServiceGrpc.newBlockingStub(channel);
             Raft.ResponseVote responseVote = raftServiceBlockingStub.requestVotes(request);
             if (responseVote.getGrant()) {
@@ -211,25 +253,25 @@ public class Server {
                 try {
                     this.state.setTotalVotes(this.state.getTotalVotes() + 1);
                     if (this.state.getNodeType() != Role.CANDIDATE) {
-                        System.out.println("[RequestVoteWrapper] Some other guy took over the leadership!! ");
+                        logger.warn("[RequestVoteWrapper] Some other guy took over the leadership!! ");
                     } else if (this.state.getTotalVotes() > cluster.size() / 2) {
-                        System.out.println("[RequestVoteWrapper] Got the leadership ::  NodeType : " + this.state.getNodeType() + " Votes : " + this.state.getTotalVotes() + " current term: " + this.state.getCurrentTerm());
+                        logger.debug("[RequestVoteWrapper] Got the leadership ::  NodeType : " + this.state.getNodeType() + " Votes : " + this.state.getTotalVotes() + " current term: " + this.state.getCurrentTerm());
                         this.state.setHeartbeatTrackerTime(System.currentTimeMillis());
                         this.state.setNodeType(Role.LEADER);
                     }
-                    System.out.println("[RequestVoteWrapper] Before state of "+server.getEndpoint()+" Match index :: "+ this.state.getMatchIndex().get(server.getServerId()) + " Next Index :: "+ this.state.getNextIndex().get(server.getServerId()));
+                    logger.debug("[RequestVoteWrapper] Before state of "+server.getEndpoint()+" Match index :: "+ this.state.getMatchIndex().get(server.getServerId()) + " Next Index :: "+ this.state.getNextIndex().get(server.getServerId()));
                     this.state.getNextIndex().set(server.getServerId(), (int) responseVote.getCandidateLastLogIndex());
                     this.state.getMatchIndex().set(server.getServerId(), (int) responseVote.getCandidateLastAppliedLogIndex());
-                    System.out.println("[RequestVoteWrapper] After state of "+server.getEndpoint()+" Match index :: "+ this.state.getMatchIndex().get(server.getServerId()) + " Next Index :: "+ this.state.getNextIndex().get(server.getServerId()));
-                    System.out.println("[RequestVoteWrapper] Number of Votes : " + this.state.getTotalVotes());
+                    logger.debug("[RequestVoteWrapper] After state of "+server.getEndpoint()+" Match index :: "+ this.state.getMatchIndex().get(server.getServerId()) + " Next Index :: "+ this.state.getNextIndex().get(server.getServerId()));
+                    logger.debug("[RequestVoteWrapper] Number of Votes : " + this.state.getTotalVotes());
                 } finally {
                     lock.unlock();
                 }
             } else {
-                System.out.println("[RequestVoteWrapper] Not granted by :: " + endpoint.getPort() + " Response :: " + responseVote.getTerm() + " Current :: " + this.state.getCurrentTerm());
+                logger.debug("[RequestVoteWrapper] Not granted by :: " + endpoint.getPort() + " Response :: " + responseVote.getTerm() + " Current :: " + this.state.getCurrentTerm());
             }
         }catch (Exception ex) {
-                System.out.println("[RequestVoteWrapper] Server might not be up!! "+ ex);
+            logger.error("[RequestVoteWrapper] Server might not be up!! "+ ex);
         } finally{
             channel.shutdown();
         }
@@ -240,12 +282,27 @@ public class Server {
     public void initiateHeartbeatRPC() {
 
         try {
-            System.out.println("[RaftService] Log Entries has " + this.state.getEntries().size() + " entries");
+            logger.debug("[RaftService] Log Entries has " + this.state.getEntries().size() + " entries" + " Jelp: " + logAppendRetries);
             if (!this.state.getNodeType().equals(Role.LEADER)) {
-                System.out.println("[initiateHeartbeatRPC] Not a leader! So not participating in HeartBeat!");
+                logger.debug("[initiateHeartbeatRPC] Not a leader! So not participating in HeartBeat!");
                 return;
             }
-            System.out.println(this.state.getLastApplied() + " getLastApplied :  " +  this.state.getLastLogIndex() + " : getLastLogIndex");
+
+            termIncreaseInterval++;
+            lock.lock();
+            try{
+                if (termIncreaseInterval > cluster.size() * 2) {
+
+                    this.state.setCurrentTerm(this.state.getCurrentTerm() + 1);
+
+                    termIncreaseInterval = 0;
+                }
+            }
+            finally{
+                lock.unlock();
+            }
+
+            logger.debug(this.state.getLastApplied() + " getLastApplied :  " +  this.state.getLastLogIndex() + " : getLastLogIndex");
             if (this.state.getLastApplied() < this.state.getLastLogIndex()) {
                 // check for majority now!
                 int i = 0, majority = 1;
@@ -255,43 +312,61 @@ public class Server {
                             && this.state.getMatchIndex().get(serverInd) == this.state.getLastLogIndex()) {
                         majority += 1;
                     }
-                    System.out.println("Server index :: "+ serverInd + " has match index :: "+this.state.getMatchIndex());
+                    logger.debug("Server index :: "+ serverInd + " has match index :: "+this.state.getMatchIndex());
                 }
                 if (majority <= cluster.size()/2) {
-                    if(logAppendRetries == MAX_REQUEST_RETRY) {
-                        System.out.println("[initiateHeartbeatRPC] Log append retries max limit reached!!");
-                        this.state.getEntries().subList((int) this.state.getLastApplied(), (int) this.state.getLastLogIndex() + 1).clear();
-                        this.state.setLastLogIndex(this.state.getEntries().size() - 1);
-                    } else {
-                        System.out.println("[initiateHeartbeatRPC] Retrying the log append retires!!");
-                        logAppendRetries++;
-                    }
+                    logger.debug("[initiateHeartbeatRPC] Retrying the log append retires!! : " + logAppendRetries);
+                    logAppendRetries++;
                 } else {
+                    logger.debug("[initiateHeartbeatRPC] Resetting everything : " + logAppendRetries);
+                    rejectionRetries = 0;
                     logAppendRetries = 0;
                 }
-                if(logAppendRetries == 0 || logAppendRetries == MAX_REQUEST_RETRY) {
-                    System.out.println("Max retry reached!!");
+                if(logAppendRetries == 0){
+                    logger.warn("Max retry reached!!");
 
                     this.state.setLastApplied(this.state.getLastLogIndex());
                     // apply snapshot
                     this.state.getEntries().addAll(this.state.getSnapshot());
                     this.state.setLastLogIndex(this.state.getEntries().size() - 1);
-
+                    rejectionRetries = 0;
                     logAppendRetries = 0;
                     this.state.getSnapshot().clear();
                 }
+                if(logAppendRetries == MAX_REQUEST_RETRY) {
+                    if(rejectionRetries == MAX_REQUEST_RETRY) {
+                        logger.warn("[initiateHeartbeatRPC] Max rejections seen from the leader! Stepping down!");
+                        logAppendRetries = 0;
+                        rejectionRetries = 0;
+                        this.state.setNodeType(Role.FOLLOWER);
+                        return;
+                    }
+                    rejectionRetries++;
+                    logger.warn("[initiateHeartbeatRPC] Log append retries max limit reached!!");
+                    logger.debug("Before :: LogEntry Size->" + this.state.getEntries().size() + " Snapshot Size->" + this.state.getSnapshot().size());
+                    if(this.state.getLastApplied() != -1) {
+                        this.state.getEntries().subList((int) this.state.getLastApplied(), (int) this.state.getLastLogIndex() + 1).clear();
+                        this.state.getEntries().addAll(this.state.getSnapshot());
+                        this.state.setLastLogIndex(this.state.getEntries().size() - 1);
+                        this.state.setLastApplied(this.state.getLastLogIndex());
+                        logger.debug("After :: " + this.state.getEntries().size());
+                        logAppendRetries = 0;
+                        this.state.getSnapshot().clear();
+                        logger.debug("After :: LogEntry Size->" + this.state.getEntries().size() + " Snapshot Size->" + this.state.getSnapshot().size());
+                        }
+                    }
             } else {
                 this.state.getEntries().addAll(this.state.getSnapshot());
                 this.state.setLastLogIndex(this.state.getEntries().size() - 1);
                 this.state.getSnapshot().clear();
             }
-            System.out.println("[initiateHeartbeatRPC] Snapshot :: "+ this.state.getSnapshot());
-            System.out.println("[initiateHeartbeatRPC] Entries :: "+ this.state.getEntries());
-            System.out.println("[initiateHeartbeatRPC] Current Node is a leader! Reseting the heartbeat timeout to :: "+System.currentTimeMillis());
+            logger.debug("[initiateHeartbeatRPC] Snapshot :: "+ this.state.getSnapshot());
+            logger.debug("[initiateHeartbeatRPC] Entries :: "+ this.state.getEntries());
+            logger.debug("[initiateHeartbeatRPC] Current Node is a leader! Reseting the heartbeat timeout to :: "+System.currentTimeMillis());
             this.state.setHeartbeatTrackerTime(System.currentTimeMillis());
 
             this.state.getEntries().stream().forEach(le ->
-                    System.out.println(le.getTerm() + " :: " + le.getCommand().getKey() +" -> "+le.getCommand().getValue()));
+                    logger.debug(le.getTerm() + " :: " + le.getCommand().getKey() +" -> "+le.getCommand().getValue()));
 
             cluster.stream().forEach(serv -> {
                 if (serv.getServerId() != Integer.parseInt(this.state.getNodeId())) {
@@ -299,20 +374,19 @@ public class Server {
                 }
             });
         } catch (Exception e) {
-            System.out.println("[initiateHeartbeatRPC] excp :: "+ e);
+            logger.error("[initiateHeartbeatRPC] excp :: "+ e);
         }
 
     }
 
     private void sendAppendEntries(Raft.ServerConnect server) {
-
-        System.out.println("[sendAppendEntries] : Sending request to " + server.getServerId() + " at "+System.currentTimeMillis());
+        logger.debug("[sendAppendEntries] : Sending request to " + server.getServerId() + " at "+System.currentTimeMillis());
         List<Raft.LogEntry> entryToSend = new ArrayList<>();
 
         Raft.AppendEntriesRequest.Builder requestBuilder = Raft.AppendEntriesRequest.newBuilder();
         try {
             if (this.state.getNodeType() != Role.LEADER) {
-                System.out.println("[sendAppendEntries] : Current node is not leader so cant send heartbeats");
+                logger.debug("[sendAppendEntries] : Current node is not leader so cant send heartbeats");
                 return;
             }
             int followerIndex = this.state.getNextIndex().get(server.getServerId());
@@ -334,23 +408,27 @@ public class Server {
 
             requestBuilder.setCommitIndex(this.state.getCommitIndex()); // Last Commit Index
             List<Raft.LogEntry> entries = this.state.getEntries();
-            System.out.println("[sendAppendEntries] peer match :: " + peerMatchIndex + " : "+this.state.getLastLogIndex());
-            System.out.println("[sendAppendEntries] Snapshot :: "+ this.state.getSnapshot());
-            System.out.println("[sendAppendEntries] Entries :: "+ this.state.getEntries());
+            logger.debug("[sendAppendEntries] peer match :: " + peerMatchIndex + " : "+this.state.getLastLogIndex());
+            logger.debug("[sendAppendEntries] Snapshot :: "+ this.state.getSnapshot());
+            logger.debug("[sendAppendEntries] Entries :: "+ this.state.getEntries());
             //ConvertToInt
             for (long i = peerMatchIndex + 1; i <= this.state.getLastLogIndex(); i++) {
+                if(entries.size() <= i) {
+                    continue;
+                }
                 entryToSend.add(entries.get((int) i));
             }
             requestBuilder.addAllEntries(entryToSend);
             //requestBuilder.setLeaderLastAppliedIndex(this.state.getLastApplied());
+            requestBuilder.setLastAppliedIndex(this.state.getLastApplied());
 
-            System.out.println("[sendAppendEntries] Final Request :: "+ requestBuilder.toString());
+            logger.debug("[sendAppendEntries] Final Request :: "+ requestBuilder.toString());
         } catch (Exception e) {
             e.printStackTrace();
-            System.out.println("[sendAppendEntries] ex : "+ e);
+            logger.error("[sendAppendEntries] ex : "+ e);
         }
 
-        System.out.println("[sendAppendEntries] : before call : " + server.getServerId());
+        logger.debug("[sendAppendEntries] : before call : " + server.getServerId());
         Raft.Endpoint endpoint = server.getEndpoint();
         ManagedChannel channel = ManagedChannelBuilder.forAddress(endpoint.getHost(), endpoint.getPort()).usePlaintext().build();
 
@@ -361,29 +439,35 @@ public class Server {
             boolean success = response.getSuccess();
             if(this.state.getCurrentTerm() < response.getTerm()){
                 this.state.setNodeType(Role.FOLLOWER);
-                System.out.println("Got rejected, as my term was lower as a leader. This shouldn't be happening");
+                logger.warn("Got rejected, as my term was lower as a leader. This shouldn't be happening");
             }
             if (!success) {
                 long term = response.getTerm();
 
                 if (term == -2) {
-                    System.out.println("Follower thinks someone else is leader");
+                    logger.warn("Follower thinks someone else is leader");
                 }
 
                 if (term == -3) {
-                    System.out.println("We have different prev index, this shouldn't happen in this design , but can happen in future");
+                    this.state.getNextIndex().set(server.getServerId(), (int) response.getLastMatchIndex() + 1);
+                    this.state.getMatchIndex().set(server.getServerId(), (int) response.getLastMatchIndex());
+                    logger.warn("We have different prev index, this shouldn't happen in this design , but can happen in future");
                 }
 
                 if (term == -4) {
-                    System.out.println("We have different term is not corrected : self correct");
+                    logger.warn("We have different term is not corrected : self correct");
+                }
+
+                if (term == -5) {
+                    logger.warn("Follower commit index more then leader!");
                 }
             } else {
-                System.out.println("[sendAppendEntries] Post Response");
+                logger.debug("[sendAppendEntries] Post Response");
                 this.state.getNextIndex().set(server.getServerId(), (int) response.getLastMatchIndex() + 1);
                 this.state.getMatchIndex().set(server.getServerId(), (int) response.getLastMatchIndex());
             }
         } catch (Exception e) {
-            System.out.println("[sendAppendEntries] after response ex : " + e);
+            logger.error("[sendAppendEntries] after response ex : " + e);
         } finally {
             lock.unlock();
             channel.shutdown();
@@ -409,9 +493,9 @@ public class Server {
                                                 .setIndex(String.valueOf(this.state.getEntries().size()))
                                                 .setTerm(this.state.getCurrentTerm()).build();
 
-            this.persistentStore.put(requestId, false);
+            this.persistentStore.put(requestId, null);
             this.state.getSnapshot().add(logEntry);
-            System.out.println("Created request with id :: "+ requestId);
+            logger.debug("Created request with id :: "+ requestId);
             return 0;
         } finally {
             lock.unlock();

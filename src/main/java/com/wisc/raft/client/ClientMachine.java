@@ -1,18 +1,42 @@
 package com.wisc.raft.client;
 
+import com.wisc.raft.RaftServer;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
+import io.grpc.ServerBuilder;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.wisc.raft.proto.Client;
 import org.wisc.raft.proto.ServerClientConnectionGrpc;
+
+import java.io.IOException;
 
 import static java.lang.Thread.sleep;
 
 public class ClientMachine {
+    private static final Logger logger =  LoggerFactory.getLogger(RaftServer.class);
 
 
-    public static void main(String[] args) throws InterruptedException {
+    public static void main(String[] args) throws InterruptedException, IOException {
+        ClientService clientService = new ClientService();
 
-        //First arg = url, second is port number
+        int appends =  Integer.parseInt(args[2]);
+        io.grpc.Server server = ServerBuilder.forPort(Integer.parseInt(args[4], Integer.parseInt(args[5]))).addService(clientService).build();
+        server.start();
+        long start = System.currentTimeMillis();
+        appendSomeEntries(args);
+        long mid = System.currentTimeMillis();
+        long cp1 = mid-start;
+        while(clientService.count != appends){
+            continue;
+        }
+        long cp2 = System.currentTimeMillis() - start;
+        logger.info(cp1 + " : " + cp2);
+        server.awaitTermination();
+    }
+
+    private static void appendSomeEntries(String[] args) throws InterruptedException {
+        logger.info(args[0] + " : " + args[1]);
         ManagedChannel channel = ManagedChannelBuilder.forAddress(args[0], Integer.parseInt(args[1])).usePlaintext().build();
         ServerClientConnectionGrpc.ServerClientConnectionBlockingStub serverClientConnectionBlockingStub = ServerClientConnectionGrpc.newBlockingStub(channel);
         Client.MetaDataRequest metaDataRequest = Client.MetaDataRequest.newBuilder().setReqType("LEADER_CONNECT").build();
@@ -24,10 +48,10 @@ public class ClientMachine {
             if (metaDataResponse.getSuccess()) {
                 leaderHost = metaDataResponse.getHost();
                 leaderPort = metaDataResponse.getPort();
-                System.out.println(leaderHost + " L: " + leaderPort);
+                logger.info(leaderHost + " : Leader Info : " + leaderPort);
                 break;
             } else {
-                System.out.println("Going to sleep :"  + metaDataResponse);
+                logger.debug("Going to sleep :"  + metaDataResponse);
                 sleep(500);
             }
         }
@@ -45,18 +69,19 @@ public class ClientMachine {
             try {
                 Client.Response response = serverClientConnectionBlockingStubLeader.put(request);
                 if (response.getSuccess()) {
-                    System.out.println("Accepted : " + key);
+
+                    logger.debug("Accepted : " + key);
                 } else {
-                    System.out.println("Failed : " + key);
+                    logger.warn("Failed : " + key);
                 }
                 key++;
                 val++;
             } catch (Exception e) {
-                System.out.println("Something went wrong : Please check : " + e);
+                logger.error("Something went wrong : Please check : " + e);
             }
 
         }
-
+        int iter = 0;
         while (true) {
             key = 10;
             val = 110;
@@ -68,25 +93,26 @@ public class ClientMachine {
                     Client.Response response = serverClientConnectionBlockingStubLeader.get(request);
                     if (response.getSuccess()) {
                         count++;
-                        System.out.println("Accepted : " + (response.getValue() == val) +  " response :  " + response.getValue() + " act val: " + val);
+                        logger.debug("Accepted : " + (response.getValue() == val) +  " response :  " + response.getValue() + " act val: " + val);
 
                     } else {
-                        System.out.println("Failed : " + key);
+                        logger.warn("Failed : " + key);
                     }
                     key++;
                     val++;
                 } catch (Exception e) {
-                    System.out.println("Something went wrong : Please check : " + e);
+                    logger.error("Something went wrong : Please check : " + e);
                 }
 
             }
             if(count == numberOfAppends){
                 break;
             }
+            iter++;
             sleep(100);
-
+            logger.debug("Trying :: "+ iter);
         }
-
+        logger.debug("Finally took :: "+ iter);
         LeaderChannel.shutdownNow();
 
     }
