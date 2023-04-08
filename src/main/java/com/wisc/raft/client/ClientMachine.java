@@ -14,8 +14,7 @@ import java.io.IOException;
 import static java.lang.Thread.sleep;
 
 public class ClientMachine {
-    private static final Logger logger =  LoggerFactory.getLogger(RaftServer.class);
-
+    private static final Logger logger =  LoggerFactory.getLogger(ClientMachine.class);
 
     public static void main(String[] args) throws InterruptedException, IOException {
         ClientService clientService = new ClientService();

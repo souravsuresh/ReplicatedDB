@@ -14,8 +14,7 @@ import java.util.Optional;
 
 public class ServerClientConnectionService extends ServerClientConnectionGrpc.ServerClientConnectionImplBase{
 
-    //Autowire ?
-    private static final Logger logger = LoggerFactory.getLogger(Database.class);
+    private static final Logger logger = LoggerFactory.getLogger(ServerClientConnectionService.class);
 
     Server server;
     public ServerClientConnectionService(Server server){
@@ -81,12 +80,9 @@ public class ServerClientConnectionService extends ServerClientConnectionGrpc.Se
             if(ret != -1){
                 response = Client.Response.newBuilder().setSuccess(true).setValue(ret).build();
             }
-
         }
         res.onNext(response);
         res.onCompleted();
-
-
     }
 
 

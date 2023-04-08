@@ -20,13 +20,14 @@ public class RaftServer {
 
     private static final Logger logger = LoggerFactory.getLogger(RaftServer.class);
 
-    /*args[0]  = our Name, args[1] : our port number , args[2] : string of followers*/
+    /*
+        args[0]  = current server id;
+        args[1]  = current server port number;
+        args[2]..args[n-1]  = all servers in cluster (space seperated id_hostname_port)
+    */
     public static void main(String[] args) throws IOException, InterruptedException {
         logger.info("[RaftServer] Starting the main server!!");
-
-        // @TODO :: Take the server ids and command line args
         Database database = new Database("./leveldb");
-
         List<Raft.ServerConnect> serverList = new ArrayList<>();
         for (int i = 2; i < args.length; i++) {
             String[] arg = args[i].split("_");
@@ -42,15 +43,12 @@ public class RaftServer {
         raftServer.setCluster(serverList);
         ServerClientConnectionService clientConnectionService = new ServerClientConnectionService(raftServer);
         RaftConsensusService raftConsensusService = new RaftConsensusService(raftServer);
-//        System.out.println("[Sys Args] "+args.toString());
-        // @TODO: RPC initalization etc , change this name
+        logger.debug("[Sys Args] "+args.toString());
         io.grpc.Server server = ServerBuilder.forPort(Integer.parseInt(args[1])).addService(raftConsensusService).addService(clientConnectionService).build();
 
         //Start the server
-        raftServer.init("localhost", 9000);
+        raftServer.init("0.0.0.0", Integer.parseInt(args[1]));
         server.start();
         server.awaitTermination();
-
-        // @TODO: health checks if required/ logging the states of server periodically etc
     }
 }

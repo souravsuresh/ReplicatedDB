@@ -13,6 +13,11 @@
         <appender-ref ref="CONSOLE"/>
     </logger>
 
+<!-- UNCOMMENT Below portion and COMMENT Above portion for disabling the debug mode -->
+<!--    <logger name="com.wisc.raft" level="info" additivity="false">-->
+<!--        <appender-ref ref="CONSOLE"/>-->
+<!--    </logger>-->
+
     <root level="error">
         <appender-ref ref="CONSOLE"/>
     </root>
