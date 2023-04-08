@@ -4,6 +4,8 @@ import com.wisc.raft.constants.Role;
 import com.wisc.raft.proto.Raft;
 import com.wisc.raft.server.Server;
 import io.grpc.stub.StreamObserver;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.wisc.raft.proto.Client;
 import org.wisc.raft.proto.ServerClientConnectionGrpc;
 
@@ -13,6 +15,8 @@ import java.util.Optional;
 public class ServerClientConnectionService extends ServerClientConnectionGrpc.ServerClientConnectionImplBase{
 
     //Autowire ?
+    private static final Logger logger = LoggerFactory.getLogger(Database.class);
+
     Server server;
     public ServerClientConnectionService(Server server){
         this.server = server;
@@ -24,8 +28,8 @@ public class ServerClientConnectionService extends ServerClientConnectionGrpc.Se
         Client.MetaDataResponse.Builder metaDataResponseBuilder = Client.MetaDataResponse.newBuilder();
         if(reqString.equals("LEADER_CONNECT")){
             if(this.server.getState().getNodeType().equals(Role.LEADER)) {
-                System.out.println("[getLeader] : I am the leader, GREAT !");
-                Optional<Raft.ServerConnect> leaderOpt = this.server.getCluster().stream().filter(serv -> serv.getServerId() != Integer.parseInt(this.server.getState().getNodeId())).findAny();
+                logger.debug("[getLeader] : I am the leader, GREAT !");
+                Optional<Raft.ServerConnect> leaderOpt = this.server.getCluster().stream().filter(serv -> serv.getServerId() == Integer.parseInt(this.server.getState().getNodeId())).findAny();
                 if (leaderOpt.isPresent()) {
                     Raft.ServerConnect serverConnect = leaderOpt.get();
                     Client.MetaDataResponse metaDataResponse = metaDataResponseBuilder.setServerId(serverConnect.getServerId()).setPort(serverConnect.getEndpoint().getPort()).setHost(serverConnect.getEndpoint().getHost()).setSuccess(true).build();
@@ -34,7 +38,7 @@ public class ServerClientConnectionService extends ServerClientConnectionGrpc.Se
                 }
             }
             else if(this.server.getState().getNodeType().equals(Role.CANDIDATE) || Objects.isNull(this.server.getState().getVotedFor())){
-                System.out.println("[getLeader] : Election going on - Don't disturb");
+                logger.debug("[getLeader] : Election going on - Don't disturb");
                 Client.MetaDataResponse metaDataResponse = metaDataResponseBuilder.setSuccess(false).build();
                 res.onNext(metaDataResponse);
                 res.onCompleted();
@@ -43,7 +47,7 @@ public class ServerClientConnectionService extends ServerClientConnectionGrpc.Se
 
                 Optional<Raft.ServerConnect> leaderOpt = this.server.getCluster().stream().filter(serv -> serv.getServerId() == Integer.parseInt(this.server.getState().getVotedFor())).findAny();
                 if (leaderOpt.isPresent()) {
-                    System.out.println("[getLeader] : FOLLOWER : " + leaderOpt.get());
+                    logger.debug("[getLeader] : FOLLOWER : " + leaderOpt.get());
 
                     Raft.ServerConnect serverConnect = leaderOpt.get();
                     Client.MetaDataResponse metaDataResponse = metaDataResponseBuilder.setServerId(serverConnect.getServerId()).setPort(serverConnect.getEndpoint().getPort()).setHost(serverConnect.getEndpoint().getHost()).setSuccess(true).build();
@@ -51,7 +55,7 @@ public class ServerClientConnectionService extends ServerClientConnectionGrpc.Se
                     res.onCompleted();
                 }
                 else{
-                    System.out.println("[getLeader] some config issue : " + this.server.getState().getVotedFor());
+                    logger.debug("[getLeader] some config issue : " + this.server.getState().getVotedFor());
                     Client.MetaDataResponse metaDataResponse = metaDataResponseBuilder.setSuccess(false).build();
                     res.onNext(metaDataResponse);
                     res.onCompleted();
@@ -67,7 +71,7 @@ public class ServerClientConnectionService extends ServerClientConnectionGrpc.Se
         String commandType = request.getCommandType();
         Client.Response response = Client.Response.newBuilder().setSuccess(false).setValue(-1).build();
         if (this.server.getState().getNodeType() != Role.LEADER) {
-            System.out.println("Cant perform action as this is not leader!!");
+            logger.warn("Cant perform action as this is not leader!!");
             res.onNext(response);
             res.onCompleted();
         }
@@ -94,13 +98,13 @@ public class ServerClientConnectionService extends ServerClientConnectionGrpc.Se
         String commandType = request.getCommandType();
         Client.Response response = Client.Response.newBuilder().setSuccess(false).setValue(-1).build();
         if (this.server.getState().getNodeType() != Role.LEADER) {
-            System.out.println("Cant perform action as this is not leader!!");
+            logger.warn("Cant perform action as this is not leader!!");
             res.onNext(response);
             res.onCompleted();
         }
 
         if(commandType.equals("PUT")){
-            System.out.println("[put] Can perform ");
+            logger.debug("[put] Can perform ");
             int ret = server.putValue(key, val);
             if(ret != -1){
                 response = Client.Response.newBuilder().setSuccess(true).setValue(ret).build();

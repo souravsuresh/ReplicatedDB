@@ -1,6 +1,7 @@
 syntax = "proto3";
 
 package org.wisc.raft.proto;
+import "google/protobuf/empty.proto";
 
 // service ServerHello{
 //   rpc GetFeature(SampleRequest) returns (SampleResponse);
@@ -9,7 +10,13 @@ service ServerClientConnection{
   rpc Get(Request) returns (Response);
   rpc Put(Request) returns (Response);
   rpc GetLeader(MetaDataRequest) returns(MetaDataResponse);
+  rpc talkBack(StatusUpdate) returns(google.protobuf.Empty);
 };
+
+message StatusUpdate{
+  string reqId = 1;
+  bool returnVal = 2;
+}
 
 message Request {
   uint64 key = 1;

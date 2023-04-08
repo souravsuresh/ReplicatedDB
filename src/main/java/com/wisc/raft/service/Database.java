@@ -1,8 +1,11 @@
 package com.wisc.raft.service;
 
+import com.wisc.raft.RaftServer;
 import com.wisc.raft.proto.Raft;
 import org.iq80.leveldb.DB;
 import org.iq80.leveldb.Options;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.*;
 import java.nio.ByteBuffer;
@@ -11,6 +14,7 @@ import java.util.Objects;
 import static org.iq80.leveldb.impl.Iq80DBFactory.factory;
 
 public class Database {
+    private static final Logger logger = LoggerFactory.getLogger(Database.class);
 
     private String path;
     public DB getDb() {
@@ -52,19 +56,19 @@ public class Database {
     public int commit(Raft.LogEntry logEntry) {
         byte[] keyBytes = ByteBuffer.allocate(Long.BYTES).putLong(logEntry.getCommand().getKey()).array();
         if (Objects.isNull(keyBytes)) {
-            System.out.println("[Database] Key cannot not be serialized");
+            logger.error("[Database] Key cannot not be serialized");
             return -1;
         }
         try {
             byte[] object = serialize(logEntry);
             if (Objects.isNull(keyBytes)) {
-                System.out.println("[Database] LogEntry cannot not be serialized");
+                logger.error("[Database] LogEntry cannot not be serialized");
                 return 1;
             }
             db.put(keyBytes, object);
             return 0;
         } catch (Exception e) {
-            System.out.println("[Database] Exception while serializing : " + e);
+            logger.error("[Database] Exception while serializing : " + e);
         }
         return 0;
     }
@@ -72,7 +76,7 @@ public class Database {
     public long read(long key) {
         byte[] keyBytes = ByteBuffer.allocate(Long.BYTES).putLong(key).array();
         if (Objects.isNull(keyBytes)) {
-            System.out.println("[Database] Object not retrieved");
+            logger.error("[Database] Object not retrieved");
             return -1;
         }
         byte[] bytes = db.get(keyBytes);
@@ -80,7 +84,7 @@ public class Database {
             Raft.LogEntry logEntry = deserialize(bytes);
             return logEntry.getCommand().getValue();
         } catch (Exception e) {
-            System.out.println("[Database] Exception while deserializing : " + e);
+            logger.error("[Database] Exception while deserializing : " + e);
         }
         return 0;
 
