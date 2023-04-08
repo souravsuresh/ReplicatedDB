@@ -10,21 +10,19 @@ import org.slf4j.LoggerFactory;
 import java.io.*;
 import java.nio.ByteBuffer;
 import java.util.Objects;
+import lombok.Getter;
+import lombok.Setter;
 
 import static org.iq80.leveldb.impl.Iq80DBFactory.factory;
 
+import java.util.*;
+
+@Getter
+@Setter
 public class Database {
     private static final Logger logger = LoggerFactory.getLogger(Database.class);
 
     private String path;
-    public DB getDb() {
-        return db;
-    }
-
-    public void setDb(DB db) {
-        this.db = db;
-    }
-
     private DB db;
 
     public Database(String path) {
@@ -87,7 +85,5 @@ public class Database {
             logger.error("[Database] Exception while deserializing : " + e);
         }
         return 0;
-
-
     }
 }
