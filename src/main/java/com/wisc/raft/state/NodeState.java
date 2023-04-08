@@ -54,5 +54,6 @@ public class NodeState {
 
         this.heartbeatTrackerTime = 0;
         this.lastLogIndex = 0;
+        this.lastLeaderCommitIndex = -1;
     }
 }
