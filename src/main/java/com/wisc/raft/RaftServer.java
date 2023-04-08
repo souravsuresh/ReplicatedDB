@@ -47,7 +47,7 @@ public class RaftServer {
         io.grpc.Server server = ServerBuilder.forPort(Integer.parseInt(args[1])).addService(raftConsensusService).addService(clientConnectionService).build();
 
         //Start the server
-        raftServer.init("0.0.0.0", Integer.parseInt(args[1]));
+        raftServer.init();
         server.start();
         server.awaitTermination();
     }

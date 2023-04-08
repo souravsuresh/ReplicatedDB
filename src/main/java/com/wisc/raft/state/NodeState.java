@@ -42,7 +42,7 @@ public class NodeState {
         this.entries = new ArrayList<>();
         this.snapshot = new ArrayList<>();
         totalVotes = 0;
-        this.commitIndex = 0;   
+        this.commitIndex = -1;
         this.lastApplied = -1;
 
         this.nextIndex = new ArrayList<>();

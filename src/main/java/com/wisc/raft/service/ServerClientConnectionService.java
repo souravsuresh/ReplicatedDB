@@ -101,7 +101,8 @@ public class ServerClientConnectionService extends ServerClientConnectionGrpc.Se
 
         if(commandType.equals("PUT")){
             logger.debug("[put] Can perform ");
-            int ret = server.putValue(key, val);
+            String clientKey = request.getEndpoint().getHost() + ":" + request.getEndpoint().getPort();
+            int ret = server.putValue(key, val, clientKey);
             if(ret != -1){
                 response = Client.Response.newBuilder().setSuccess(true).setValue(ret).build();
             }

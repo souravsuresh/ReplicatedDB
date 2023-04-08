@@ -89,7 +89,7 @@ public class RaftConsensusService extends RaftServiceGrpc.RaftServiceImplBase {
 
     @Override
     public void appendEntries(Raft.AppendEntriesRequest request, StreamObserver<Raft.AppendEntriesResponse> responseObserver) {
-        logger.debug("[appendEntries] : Follower and my terms is : " + this.server.getState().getCurrentTerm());
+        logger.debug("[AppendEntriesService] : Follower and my terms is : " + this.server.getState().getCurrentTerm());
         long leaderTerm = request.getTerm();
         long lastIndex = request.getLastAppendedLogIndex();
         String serverID = request.getLeaderId();
@@ -102,20 +102,30 @@ public class RaftConsensusService extends RaftServiceGrpc.RaftServiceImplBase {
         try {
 
             if (leaderTerm < this.server.getState().getCurrentTerm()) {
-                responseBuilder = responseBuilder.setSuccess(false).setTerm(this.server.getState().getCurrentTerm()); // What ??
-                responseObserver.onNext(responseBuilder.build());
-                responseObserver.onCompleted();
-                return;
+                if(commitIndex < this.server.getState().getCommitIndex()) {
+                    logger.info("[AppendEntriesService] Candidate has bigger term and commit index!");
+                    responseBuilder = responseBuilder.setSuccess(false).setTerm(this.server.getState().getCurrentTerm()); // What ??
+                    responseObserver.onNext(responseBuilder.build());
+                    responseObserver.onCompleted();
+                    return;
+                }
+                else {
+                    logger.info("[AppendEntriesService] Stepping down as follower since my term is mismatch");
+                    this.server.getState().setNodeType(Role.FOLLOWER);
+                    this.server.getState().setVotedFor(request.getLeaderId());
+                    this.server.getState().setCurrentTerm(leaderTerm);
+                }
             }
 
             if (leaderTerm >= this.server.getState().getCurrentTerm()) {
-
+                logger.debug("[AppendEntriesService] Ensuring current node is follower since term is lesser");
                 this.server.getState().setNodeType(Role.FOLLOWER);
                 this.server.getState().setVotedFor(request.getLeaderId());
                 this.server.getState().setCurrentTerm(leaderTerm);
                 responseBuilder.setTerm(this.server.getState().getCurrentTerm());
 
                 if (request.getLastAppendedLogIndex() > this.server.getState().getEntries().size()) {
+                    logger.warn("[AppendEntriesService] Request LastAppendLog index : " +request.getLastAppendedLogIndex()+" is more than current log entry size : "+ this.server.getState().getEntries().size());
                     responseBuilder = responseBuilder.setSuccess(false).setTerm(-3);
                     if( this.server.getState().getEntries().size() == 0){
                         responseBuilder.setLastMatchIndex(-1);
@@ -132,7 +142,7 @@ public class RaftConsensusService extends RaftServiceGrpc.RaftServiceImplBase {
                 List<Raft.LogEntry> leaderEntries = request.getEntriesList();
 
                 if(this.server.getState().getCommitIndex() != 0 && this.server.getState().getCommitIndex() > request.getLastAppliedIndex()){
-                    logger.warn("Rejecting AppendEntries RPC: Commit too ahead in the follower : Sacrilige" );
+                    logger.warn("[AppendEntriesService] Rejecting AppendEntries RPC: Commit too ahead in the follower : Sacrilige" );
                     responseBuilder = responseBuilder.setSuccess(false).setTerm(-5);
                     responseObserver.onNext(responseBuilder.build());
                     responseObserver.onCompleted();
@@ -143,7 +153,7 @@ public class RaftConsensusService extends RaftServiceGrpc.RaftServiceImplBase {
                 if (request.getLastAppendedLogTerm() != -1 && this.server.getState().getLastApplied() != -1 &&
                         this.server.getState().getEntries().size() > request.getLastAppendedLogIndex() &&
                         this.server.getState().getEntries().get((int) this.server.getState().getLastApplied()).getTerm() != request.getLastAppendedLogTerm()) {
-                    logger.warn("Rejecting AppendEntries RPC: terms don't agree " );
+                    logger.warn("[AppendEntriesService] Rejecting AppendEntries RPC: terms don't agree " );
                     //rollback by sending one at a time
                     this.server.getState().getEntries().subList((int) this.server.getState().getLastApplied() , this.server.getState().getEntries().size()).clear();
                     this.server.getState().setLastApplied(this.server.getState().getLastApplied()-1);
@@ -154,12 +164,13 @@ public class RaftConsensusService extends RaftServiceGrpc.RaftServiceImplBase {
                 }
 
                 if(this.server.getState().getEntries().size() > (int) request.getLastAppendedLogIndex() + 1) {
+                    logger.debug("[AppendEntriesService] Removing entries from "+ request.getLastAppendedLogIndex() + " to "+this.server.getState().getEntries().size());
                     this.server.getState().getEntries().subList((int) request.getLastAppendedLogIndex() + 1, this.server.getState().getEntries().size()).clear();
                 }
                 this.server.getState().getEntries().addAll(leaderEntries);
                 this.server.getState().setLastApplied(request.getLastAppliedIndex());
                 if(request.getLastAppliedIndex() > this.server.getState().getEntries().size()) {
-                    logger.warn("Oops!! Internesting scneario where Leader's Last Applied is more than your size! "+
+                    logger.warn("[AppendEntriesService] Oops!! Internesting scneario where Leader's Last Applied is more than your size! "+
                             request.getLastAppliedIndex() + " : "+ this.server.getState().getEntries().size());
                 }
                 this.server.getState().setLastApplied(request.getLastAppliedIndex());
@@ -174,7 +185,7 @@ public class RaftConsensusService extends RaftServiceGrpc.RaftServiceImplBase {
                 responseObserver.onCompleted();
             }
         } finally {
-            logger.debug("[RaftService] Log Entries has " + this.server.getState().getEntries().size() + " entries");
+            logger.debug("[AppendEntriesService] Log Entries has " + this.server.getState().getEntries().size() + " entries");
             this.server.getState().getEntries().stream().forEach(le ->
                     logger.debug(le.getTerm() + " :: " + le.getCommand().getKey() +" -> "+le.getCommand().getValue()));
             this.server.getLock().unlock();

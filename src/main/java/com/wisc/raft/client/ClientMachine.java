@@ -1,6 +1,7 @@
 package com.wisc.raft.client;
 
 import com.wisc.raft.RaftServer;
+import com.wisc.raft.proto.Raft;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.ServerBuilder;
@@ -18,20 +19,24 @@ public class ClientMachine {
 
     public static void main(String[] args) throws InterruptedException, IOException {
         ClientService clientService = new ClientService();
-
+        clientService.setCount(0);
         int appends =  Integer.parseInt(args[2]);
-        io.grpc.Server server = ServerBuilder.forPort(Integer.parseInt(args[4], Integer.parseInt(args[5]))).addService(clientService).build();
+        io.grpc.Server server = ServerBuilder.forPort(Integer.parseInt(args[4])).addService(clientService).build();
         server.start();
         long start = System.currentTimeMillis();
         appendSomeEntries(args);
         long mid = System.currentTimeMillis();
         long cp1 = mid-start;
-        while(clientService.count != appends){
-            continue;
+        int iter = 0;
+        while(clientService.getCount() != appends){
+            iter += 1;
+            Thread.sleep(100);
         }
+        logger.info("Done for the day!! "+iter);
+        logger.info("Finish");
         long cp2 = System.currentTimeMillis() - start;
         logger.info(cp1 + " : " + cp2);
-        server.awaitTermination();
+        server.shutdownNow();
     }
 
     private static void appendSomeEntries(String[] args) throws InterruptedException {
@@ -62,9 +67,10 @@ public class ClientMachine {
         int numberOfAppends = Integer.parseInt(args[2]);
         int key = 10;
         int val = 110;
+        Client.Endpoint endpoint = Client.Endpoint.newBuilder().setPort(Integer.parseInt(args[4])).setHost(args[3]).build();
         for (int i = 0; i < numberOfAppends; i++) {
             //TODO put to const
-            Client.Request request = Client.Request.newBuilder().setCommandType("PUT").setKey(key).setValue(val).build();
+            Client.Request request = Client.Request.newBuilder().setCommandType("PUT").setKey(key).setValue(val).setEndpoint(endpoint).build();
             try {
                 Client.Response response = serverClientConnectionBlockingStubLeader.put(request);
                 if (response.getSuccess()) {

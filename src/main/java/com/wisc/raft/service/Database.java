@@ -66,7 +66,7 @@ public class Database {
             db.put(keyBytes, object);
             return 0;
         } catch (Exception e) {
-            logger.error("[Database] Exception while serializing : " + e);
+            logger.error("[Database] Exception while serializing : " + e + " key" + logEntry);
         }
         return 0;
     }

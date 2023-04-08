@@ -22,6 +22,8 @@ message Request {
   uint64 key = 1;
   uint64 value = 2;
   string commandType = 3;
+  Endpoint endpoint = 4;
+
 };
 
 message Response {
@@ -32,6 +34,12 @@ message Response {
 message MetaDataRequest{
   string reqType = 1;
 }
+
+message Endpoint {
+  optional string host = 1;
+  optional sint32 port = 2;
+};
+
 
 message MetaDataResponse{
   optional string host = 1;
