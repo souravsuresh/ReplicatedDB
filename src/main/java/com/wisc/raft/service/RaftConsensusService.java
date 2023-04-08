@@ -165,6 +165,7 @@ public class RaftConsensusService extends RaftServiceGrpc.RaftServiceImplBase {
                 this.server.getState().setLastApplied(request.getLastAppliedIndex());
                 long index = this.server.getState().getEntries().size() - 1;
                 this.server.getState().setLastLogIndex(index);
+                this.server.getState().setLastLeaderCommitIndex(request.getCommitIndex());
                 responseBuilder.setLastMatchIndex(index);
                 responseBuilder.setLastMatchTerm(index == -1 ? 0 : this.server.getState().getEntries().get((int) index).getTerm()); //Check this
                 responseBuilder.setSuccess(true);
