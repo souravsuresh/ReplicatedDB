@@ -101,6 +101,7 @@ public class Server {
          electionScheduler = electionExecutorService.scheduleAtFixedRate(initiateElectionRPCRunnable, 1L, (long) (100 + random.nextDouble() * 100), TimeUnit.MILLISECONDS);
         heartbeatExecutorService = Executors.newSingleThreadScheduledExecutor();
         heartBeatScheduler = heartbeatExecutorService.scheduleAtFixedRate(initiateHeartbeatRPCRunnable, 1500, 80, TimeUnit.MILLISECONDS);
+        logger.info("Started at :: "+ System.currentTimeMillis());
     }
 
     private void initiateReplyScheduleRPC(){
