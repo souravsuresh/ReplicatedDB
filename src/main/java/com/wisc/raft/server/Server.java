@@ -96,12 +96,11 @@ public class Server {
         electionExecutorService = Executors.newSingleThreadScheduledExecutor();
         commitSchedulerService = Executors.newSingleThreadScheduledExecutor();
         replySchedulerService = Executors.newSingleThreadScheduledExecutor();
-        replyScheduler = replySchedulerService.scheduleAtFixedRate(replyClientExecutorRunnable,2, 30, TimeUnit.SECONDS);
-        commitScheduler = commitSchedulerService.scheduleAtFixedRate(initiateElectionExecutorRunnable, 1, 5, TimeUnit.SECONDS);
-        electionScheduler = electionExecutorService.scheduleAtFixedRate(initiateElectionRPCRunnable, 1, 5, TimeUnit.SECONDS);
-        // electionScheduler = electionExecutorService.scheduleAtFixedRate(initiateElectionRPCRunnable, 1L, (long) (100 + random.nextDouble() * ELECTION_TIMEOUT_INTERVAL), TimeUnit.SECONDS);
+        replyScheduler = replySchedulerService.scheduleAtFixedRate(replyClientExecutorRunnable,2, 3000, TimeUnit.SECONDS);
+        commitScheduler = commitSchedulerService.scheduleAtFixedRate(initiateElectionExecutorRunnable, 2L, 200, TimeUnit.MILLISECONDS);
+         electionScheduler = electionExecutorService.scheduleAtFixedRate(initiateElectionRPCRunnable, 1L, (long) (100 + random.nextDouble() * 100), TimeUnit.MILLISECONDS);
         heartbeatExecutorService = Executors.newSingleThreadScheduledExecutor();
-        heartBeatScheduler = heartbeatExecutorService.scheduleAtFixedRate(initiateHeartbeatRPCRunnable, 5, 2, TimeUnit.SECONDS);
+        heartBeatScheduler = heartbeatExecutorService.scheduleAtFixedRate(initiateHeartbeatRPCRunnable, 1500, 80, TimeUnit.MILLISECONDS);
     }
 
     private void initiateReplyScheduleRPC(){
@@ -191,9 +190,9 @@ public class Server {
         logger.debug("[initiateElectionRPC] Starting election at :: "+ System.currentTimeMillis());
         lock.lock();
         try {
-            logger.debug("[initiateElectionRPC] Current time :: " + System.currentTimeMillis() + " HeartBeat timeout time :: " +  (this.state.getHeartbeatTrackerTime() + 5 * 1000 * MAX_REQUEST_RETRY));
-            if(this.state.getHeartbeatTrackerTime() != 0 && System.currentTimeMillis() > (this.state.getHeartbeatTrackerTime() +  5 * 1000 * MAX_REQUEST_RETRY) ) {
-                logger.debug("[initiateElectionRPC] Stepping down as follower");
+            logger.debug("[initiateElectionRPC] Current time :: " + System.currentTimeMillis() + " HeartBeat timeout time :: " +  (this.state.getHeartbeatTrackerTime() + 5 * 80 * MAX_REQUEST_RETRY));
+            if(this.state.getHeartbeatTrackerTime() != 0 && System.currentTimeMillis() > (this.state.getHeartbeatTrackerTime() +  5 * 80 * MAX_REQUEST_RETRY) ) {
+                logger.info("[initiateElectionRPC] Stepping down as follower at :: "+ System.currentTimeMillis());
                 this.state.setVotedFor(null);
                 this.state.setNodeType(Role.FOLLOWER);
             }
@@ -256,6 +255,7 @@ public class Server {
                         logger.info("[RequestVoteWrapper] Got the leadership ::  NodeType : " + this.state.getNodeType() + " Votes : " + this.state.getTotalVotes() + " current term: " + this.state.getCurrentTerm());
                         this.state.setHeartbeatTrackerTime(System.currentTimeMillis());
                         this.state.setNodeType(Role.LEADER);
+                        logger.info("[RequestVoteWrapper] Got leadership at :: "+System.currentTimeMillis());
                     }
                     logger.debug("[RequestVoteWrapper] Before state of "+server.getEndpoint()+" Match index :: "+ this.state.getMatchIndex().get(server.getServerId()) + " Next Index :: "+ this.state.getNextIndex().get(server.getServerId()));
                     this.state.getNextIndex().set(server.getServerId(), (int) responseVote.getCandidateLastLogIndex() + 1);
