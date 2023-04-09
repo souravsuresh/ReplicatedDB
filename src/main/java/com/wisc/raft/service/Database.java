@@ -36,7 +36,7 @@ public class Database {
         }
     }
 
-    public static byte[] serialize(Object obj) throws Exception {
+    public static byte[] serialize(Raft.LogEntry obj) throws Exception {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         ObjectOutputStream os = new ObjectOutputStream(out);
         os.writeObject(obj);

@@ -6,15 +6,14 @@ import com.wisc.raft.service.Database;
 import com.wisc.raft.service.RaftConsensusService;
 import com.wisc.raft.service.ServerClientConnectionService;
 import io.grpc.ServerBuilder;
-import lombok.extern.log4j.Log4j;
-import lombok.extern.log4j.Log4j2;
-import lombok.extern.slf4j.Slf4j;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Random;
+
 
 public class RaftServer {
 
@@ -27,7 +26,8 @@ public class RaftServer {
     */
     public static void main(String[] args) throws IOException, InterruptedException {
         logger.info("[RaftServer] Starting the main server!!");
-        Database database = new Database("./leveldb");
+        Random rand = new Random();
+        Database database = new Database("./leveldb" + rand.nextInt(100));
         List<Raft.ServerConnect> serverList = new ArrayList<>();
         for (int i = 2; i < args.length; i++) {
             String[] arg = args[i].split("_");

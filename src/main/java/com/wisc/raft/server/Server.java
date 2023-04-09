@@ -8,13 +8,11 @@ import com.wisc.raft.service.RaftConsensusService;
 import com.wisc.raft.state.NodeState;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
-import javafx.util.Pair;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.wisc.raft.proto.Client;
 import org.wisc.raft.proto.ServerClientConnectionGrpc;
 
 import java.util.*;
@@ -64,7 +62,7 @@ public class Server {
     private Database db;
 
     private ServerClientConnectionGrpc.ServerClientConnectionBlockingStub serverClientConnectionBlockingStub;
-    private ConcurrentHashMap<String, Pair<String,Boolean>> persistentStore;
+    //private ConcurrentHashMap<String, Pair<String,Boolean>> persistentStore;
 
     private RaftConsensusService raftConsensusService;
 
@@ -83,28 +81,28 @@ public class Server {
             matchIndex.add(-1);
             nextIndex.add(0);
         });
-        persistentStore = new ConcurrentHashMap<>();
+        //persistentStore = new ConcurrentHashMap<>();
         this.state.setNextIndex(nextIndex);
         this.state.setMatchIndex(matchIndex);
 
         Runnable initiateElectionRPCRunnable = () -> initiateElectionRPC();
         Runnable initiateHeartbeatRPCRunnable = () -> initiateHeartbeatRPC();
         Runnable initiateElectionExecutorRunnable = () -> initiateCommitScheduleRPC();
-        Runnable replyClientExecutorRunnable = () -> initiateReplyScheduleRPC();
+        //Runnable replyClientExecutorRunnable = () -> initiateReplyScheduleRPC();
         this.electionExecutor = new ThreadPoolExecutor(cluster.size(), cluster.size(), 60, TimeUnit.SECONDS, new LinkedBlockingQueue<Runnable>());
         this.heartBeatExecutor = new ThreadPoolExecutor(cluster.size(), cluster.size(), 60, TimeUnit.SECONDS, new LinkedBlockingQueue<Runnable>());
         electionExecutorService = Executors.newSingleThreadScheduledExecutor();
         commitSchedulerService = Executors.newSingleThreadScheduledExecutor();
         replySchedulerService = Executors.newSingleThreadScheduledExecutor();
-        replyScheduler = replySchedulerService.scheduleAtFixedRate(replyClientExecutorRunnable,2, 30, TimeUnit.SECONDS);
-        commitScheduler = commitSchedulerService.scheduleAtFixedRate(initiateElectionExecutorRunnable, 1, 5, TimeUnit.SECONDS);
-        electionScheduler = electionExecutorService.scheduleAtFixedRate(initiateElectionRPCRunnable, 1, 5, TimeUnit.SECONDS);
+        //replyScheduler = replySchedulerService.scheduleAtFixedRate(replyClientExecutorRunnable,2, 30, TimeUnit.SECONDS);
+        commitScheduler = commitSchedulerService.scheduleAtFixedRate(initiateElectionExecutorRunnable, 2L, 200, TimeUnit.MILLISECONDS);
+        electionScheduler = electionExecutorService.scheduleAtFixedRate(initiateElectionRPCRunnable, 1L, (long) (100 + random.nextDouble() * 100), TimeUnit.MILLISECONDS);
         // electionScheduler = electionExecutorService.scheduleAtFixedRate(initiateElectionRPCRunnable, 1L, (long) (100 + random.nextDouble() * ELECTION_TIMEOUT_INTERVAL), TimeUnit.SECONDS);
         heartbeatExecutorService = Executors.newSingleThreadScheduledExecutor();
-        heartBeatScheduler = heartbeatExecutorService.scheduleAtFixedRate(initiateHeartbeatRPCRunnable, 5, 2, TimeUnit.SECONDS);
+        heartBeatScheduler = heartbeatExecutorService.scheduleAtFixedRate(initiateHeartbeatRPCRunnable,  1500, 80, TimeUnit.MILLISECONDS);
     }
 
-    private void initiateReplyScheduleRPC(){
+    /*private void initiateReplyScheduleRPC(){
         if(this.state.getNodeType().equals(Role.LEADER)) {
                 System.out.println(persistentStore);
                 Map<String, Pair<ServerClientConnectionGrpc.ServerClientConnectionBlockingStub, ManagedChannel>> clientChannels = new HashMap<>();
@@ -134,6 +132,8 @@ public class Server {
             logger.debug("Not a leader so won't be doing");
         }
     }
+    */
+
 
 
 
@@ -150,10 +150,10 @@ public class Server {
                             logger.warn("[CommitSchedule] Failed but no issues");
                         }
                         else{
-                            logger.debug("[CommitSchedule] Commited successfully :: "+i);
+                            logger.info("[CommitSchedule] Commited successfully :: "+ i + " : " + System.currentTimeMillis());
                         }
-                        Pair<String, Boolean> stringBooleanPair = this.persistentStore.get(this.state.getEntries().get((int) i).getRequestId());
-                        this.persistentStore.put(this.state.getEntries().get((int) i).getRequestId(), new Pair<>(stringBooleanPair.getKey(), ret != -1));
+                        //Pair<String, Boolean> stringBooleanPair = this.persistentStore.get(this.state.getEntries().get((int) i).getRequestId());
+                        //this.persistentStore.put(this.state.getEntries().get((int) i).getRequestId(), new Pair<>(stringBooleanPair.getKey(), ret != -1));
                         this.state.setCommitIndex(this.state.getCommitIndex() + 1);
                     }
                 }
@@ -171,10 +171,10 @@ public class Server {
                             logger.warn("[CommitSchedule] Failed but no issues");
                         }
                         else{
-                            logger.debug("[CommitSchedule] Commited successfully :: "+i);
+                            logger.info("[CommitSchedule] Commited successfully ::  "+ i + " : " + System.currentTimeMillis());
                         }
-                        Pair<String, Boolean> stringBooleanPair = this.persistentStore.get(this.state.getEntries().get((int) i).getRequestId());
-                        this.persistentStore.put(this.state.getEntries().get((int) i).getRequestId(), new Pair<>(stringBooleanPair.getKey(), ret != -1));
+                        //Pair<String, Boolean> stringBooleanPair = this.persistentStore.get(this.state.getEntries().get((int) i).getRequestId());
+                        //this.persistentStore.put(this.state.getEntries().get((int) i).getRequestId(), new Pair<>(stringBooleanPair.getKey(), ret != -1));
                         this.state.setCommitIndex(this.state.getCommitIndex() + 1);
                     }
                 }
@@ -192,7 +192,7 @@ public class Server {
         lock.lock();
         try {
             logger.debug("[initiateElectionRPC] Current time :: " + System.currentTimeMillis() + " HeartBeat timeout time :: " +  (this.state.getHeartbeatTrackerTime() + 5 * 1000 * MAX_REQUEST_RETRY));
-            if(this.state.getHeartbeatTrackerTime() != 0 && System.currentTimeMillis() > (this.state.getHeartbeatTrackerTime() +  5 * 1000 * MAX_REQUEST_RETRY) ) {
+            if(this.state.getHeartbeatTrackerTime() != 0 && System.currentTimeMillis() > (this.state.getHeartbeatTrackerTime() +  3 * 80 * MAX_REQUEST_RETRY) ) {
                 logger.debug("[initiateElectionRPC] Stepping down as follower");
                 this.state.setVotedFor(null);
                 this.state.setNodeType(Role.FOLLOWER);
@@ -403,8 +403,8 @@ public class Server {
             requestBuilder.setCommitIndex(this.state.getCommitIndex()); // Last Commit Index
             List<Raft.LogEntry> entries = this.state.getEntries();
             logger.debug("[sendAppendEntries] peer match :: " + peerMatchIndex + " : "+this.state.getLastLogIndex());
-            logger.debug("[sendAppendEntries] Snapshot :: "+ this.state.getSnapshot());
-            logger.debug("[sendAppendEntries] Entries :: "+ this.state.getEntries());
+            //logger.debug("[sendAppendEntries] Snapshot :: "+ this.state.getSnapshot());
+            //logger.debug("[sendAppendEntries] Entries :: "+ this.state.getEntries());
             //ConvertToInt
             for (long i = peerMatchIndex + 1; i <= this.state.getLastLogIndex(); i++) {
                 if(entries.size() <= i) {
@@ -485,7 +485,7 @@ public class Server {
                                                 .setIndex(String.valueOf(this.state.getEntries().size()))
                                                 .setTerm(this.state.getCurrentTerm()).build();
 
-            this.persistentStore.put(requestId, new Pair<>(clientKey,null));
+            //this.persistentStore.put(requestId, new Pair<>(clientKey,null));
             this.state.getSnapshot().add(logEntry);
             logger.debug("Created request with id :: "+ requestId);
             return 0;

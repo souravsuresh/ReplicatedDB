@@ -11,12 +11,13 @@ import org.wisc.raft.proto.Client;
 import org.wisc.raft.proto.ServerClientConnectionGrpc;
 
 import java.io.IOException;
+import java.util.Random;
 
 import static java.lang.Thread.sleep;
 
 public class ClientMachine {
     private static final Logger logger =  LoggerFactory.getLogger(ClientMachine.class);
-
+    static Random  rn = new Random();
     public static void main(String[] args) throws InterruptedException, IOException {
         ClientService clientService = new ClientService();
         clientService.setCount(0);
@@ -25,18 +26,9 @@ public class ClientMachine {
         server.start();
         long start = System.currentTimeMillis();
         appendSomeEntries(args);
-        long mid = System.currentTimeMillis();
-        long cp1 = mid-start;
-        int iter = 0;
-        while(clientService.getCount() != appends){
-            iter += 1;
-            Thread.sleep(100);
-        }
-        logger.info("Done for the day!! "+iter);
         logger.info("Finish");
-        long cp2 = System.currentTimeMillis() - start;
-        logger.info(cp1 + " : " + cp2);
-        server.shutdownNow();
+        logger.info(String.valueOf(start));
+        server.awaitTermination();
     }
 
     private static void appendSomeEntries(String[] args) throws InterruptedException {
@@ -65,8 +57,8 @@ public class ClientMachine {
         ManagedChannel LeaderChannel = ManagedChannelBuilder.forAddress(leaderHost, leaderPort).usePlaintext().build();
         ServerClientConnectionGrpc.ServerClientConnectionBlockingStub serverClientConnectionBlockingStubLeader = ServerClientConnectionGrpc.newBlockingStub(LeaderChannel);
         int numberOfAppends = Integer.parseInt(args[2]);
-        int key = 10;
-        int val = 110;
+        int key = rn.nextInt(1000000);
+        int val = rn.nextInt(1000000);
         Client.Endpoint endpoint = Client.Endpoint.newBuilder().setPort(Integer.parseInt(args[4])).setHost(args[3]).build();
         for (int i = 0; i < numberOfAppends; i++) {
             //TODO put to const
@@ -86,38 +78,7 @@ public class ClientMachine {
             }
 
         }
-        int iter = 0;
-        while (true) {
-            key = 10;
-            val = 110;
-            int count = 0;
-            for (int i = 0; i < numberOfAppends; i++) {
-                //TODO put to const
-                Client.Request request = Client.Request.newBuilder().setCommandType("GET").setKey(key).build();
-                try {
-                    Client.Response response = serverClientConnectionBlockingStubLeader.get(request);
-                    if (response.getSuccess()) {
-                        count++;
-                        logger.debug("Accepted : " + (response.getValue() == val) +  " response :  " + response.getValue() + " act val: " + val);
 
-                    } else {
-                        logger.warn("Failed : " + key);
-                    }
-                    key++;
-                    val++;
-                } catch (Exception e) {
-                    logger.error("Something went wrong : Please check : " + e);
-                }
-
-            }
-            if(count == numberOfAppends){
-                break;
-            }
-            iter++;
-            sleep(100);
-            logger.debug("Trying :: "+ iter);
-        }
-        logger.debug("Finally took :: "+ iter);
         LeaderChannel.shutdownNow();
 
     }
