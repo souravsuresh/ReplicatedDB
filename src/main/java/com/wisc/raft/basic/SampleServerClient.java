@@ -26,7 +26,8 @@ public class SampleServerClient {
     static int id;
     static int key = 0;
     static int value = 0;
-
+    static int LIMIT = 10000;
+    static long start;
     private static ThreadPoolExecutor submitExecutor;
 
     public SampleServerClient(String arg, List<Sample.SampleServerConnect> serverList) {
@@ -50,7 +51,8 @@ public class SampleServerClient {
         submitObjectService = Executors.newSingleThreadScheduledExecutor();
         submitObjects = submitObjectService.scheduleAtFixedRate(initiateSubmit, 5, 1, TimeUnit.SECONDS);
         submitExecutor = new ThreadPoolExecutor(cluster.size()*10, cluster.size()*50, 60, TimeUnit.SECONDS, new LinkedBlockingQueue<Runnable>());
-
+	start = System.currentTimeMillis();
+	System.out.println("Starting at :: " + start);
     }
 
     public static void submitObject() {
@@ -64,9 +66,15 @@ public class SampleServerClient {
             cluster.stream().forEach(cl -> submitExecutor.submit(() -> appendEntries(cl.getEndpoint(), logEntry)));
             key++;
             value++;
-            isRunning = (System.currentTimeMillis() - initTime > 950);
+            isRunning = (System.currentTimeMillis() - initTime < 10);
+		//System.out.println("Is Running :: " + isRunning);
         }
-
+	System.out.println("Added till "+key+" :: " +value);
+        if(key > LIMIT) {
+	   System.out.println("Took " + (System.currentTimeMillis() - start) + " ms to insert "+key);
+	   submitObjects.cancel(false);
+	}
+	System.out.println("Done at "+System.currentTimeMillis());
     }
 
     private static void appendEntries(Sample.SampleEndpoint endpoint, Sample.SampleLogEntry logEntry) {
@@ -81,7 +89,8 @@ public class SampleServerClient {
 
             Sample.SampleAppendEntriesResponse response = raftServiceBlockingStub.appendEntries(req);
 
-        }
+        channel.shutdownNow();
+	}
         catch(Exception e){
             System.out.println("HW " + e);
         }
