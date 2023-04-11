@@ -14,11 +14,12 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.List;
+import java.util.*;
 
 public class RaftServer {
 
     private static final Logger logger = LoggerFactory.getLogger(RaftServer.class);
+    private static final Random random = new Random();
 
     /*
         args[0]  = current server id;
@@ -27,7 +28,9 @@ public class RaftServer {
     */
     public static void main(String[] args) throws IOException, InterruptedException {
         logger.info("[RaftServer] Starting the main server!!");
-        Database database = new Database("./leveldb");
+        String levelDB = "./leveldb_"+random.nextInt(100);
+        logger.info("LevelDB folder :: "+levelDB);
+        Database database = new Database(levelDB);
         List<Raft.ServerConnect> serverList = new ArrayList<>();
         for (int i = 2; i < args.length; i++) {
             String[] arg = args[i].split("_");

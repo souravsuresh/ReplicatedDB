@@ -22,7 +22,6 @@ public class ClientService extends ServerClientConnectionGrpc.ServerClientConnec
 
     @Override
     public void talkBack(Client.StatusUpdate req, StreamObserver<Empty> response){
-//        System.out.println(req + " : " + count);
         lock.lock();
         if (req.getReturnVal()) {
            this.setCount(this.getCount() + 1);

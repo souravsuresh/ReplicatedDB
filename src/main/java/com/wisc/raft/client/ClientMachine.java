@@ -68,6 +68,7 @@ public class ClientMachine {
         int key = 10;
         int val = 110;
         Client.Endpoint endpoint = Client.Endpoint.newBuilder().setPort(Integer.parseInt(args[4])).setHost(args[3]).build();
+        logger.info("Starting the requests at :: "+ System.currentTimeMillis());
         for (int i = 0; i < numberOfAppends; i++) {
             //TODO put to const
             Client.Request request = Client.Request.newBuilder().setCommandType("PUT").setKey(key).setValue(val).setEndpoint(endpoint).build();
@@ -86,38 +87,7 @@ public class ClientMachine {
             }
 
         }
-        int iter = 0;
-        while (true) {
-            key = 10;
-            val = 110;
-            int count = 0;
-            for (int i = 0; i < numberOfAppends; i++) {
-                //TODO put to const
-                Client.Request request = Client.Request.newBuilder().setCommandType("GET").setKey(key).build();
-                try {
-                    Client.Response response = serverClientConnectionBlockingStubLeader.get(request);
-                    if (response.getSuccess()) {
-                        count++;
-                        logger.debug("Accepted : " + (response.getValue() == val) +  " response :  " + response.getValue() + " act val: " + val);
-
-                    } else {
-                        logger.warn("Failed : " + key);
-                    }
-                    key++;
-                    val++;
-                } catch (Exception e) {
-                    logger.error("Something went wrong : Please check : " + e);
-                }
-
-            }
-            if(count == numberOfAppends){
-                break;
-            }
-            iter++;
-            sleep(100);
-            logger.debug("Trying :: "+ iter);
-        }
-        logger.debug("Finally took :: "+ iter);
+        logger.info("Finished the requests at :: "+ System.currentTimeMillis());
         LeaderChannel.shutdownNow();
 
     }

@@ -29,14 +29,14 @@ public class RaftConsensusService extends RaftServiceGrpc.RaftServiceImplBase {
         this.server.getLock().lock();
         try {
             if (request.getCandidateId().equals(this.server.getState().getNodeId())) {
-                logger.warn("[RequestVoteService] Oops!! Candidate cant be voting itself or something term wise wrong!");
+                logger.debug("[RequestVoteService] Oops!! Candidate cant be voting itself or something term wise wrong!");
                 responseObserver.onNext(responseBuilder.build());
                 responseObserver.onCompleted();
                 return;
             }
             if (request.getTerm() <= this.server.getState().getCurrentTerm()
                     && this.server.getState().getNodeType().equals(Role.LEADER)) {
-                logger.warn("[RequestVoteService] Oops!! Candidate cant be voting as you are already a leader");
+                logger.debug("[RequestVoteService] Oops!! Candidate cant be voting as you are already a leader");
                 responseObserver.onNext(responseBuilder.build());
                 responseObserver.onCompleted();
                 return;
@@ -47,7 +47,7 @@ public class RaftConsensusService extends RaftServiceGrpc.RaftServiceImplBase {
             long lastLogIndex = this.server.getState().getLastApplied() == 0 ? -1 : this.server.getState().getLastApplied();
 
             if(request.getLeaderLastAppliedTerm()  < lastLogTerm || request.getLeaderLastAppliedIndex() < this.server.getState().getLastApplied()){
-                logger.warn("[RequestVoteService] You have bigger Term or more entries than the pot. leader " + " Leader Term : " + request.getLeaderLastAppliedTerm() + " My Term : " + lastLogTerm);
+                logger.debug("[RequestVoteService] You have bigger Term or more entries than the pot. leader " + " Leader Term : " + request.getLeaderLastAppliedTerm() + " My Term : " + lastLogTerm);
                 responseObserver.onNext(responseBuilder.build());
                 responseObserver.onCompleted();
                 return;
@@ -77,7 +77,7 @@ public class RaftConsensusService extends RaftServiceGrpc.RaftServiceImplBase {
                 responseObserver.onCompleted();
                 return;
             } else {
-                logger.warn("[RequestVoteService] My current term is more than asked!!");
+                logger.debug("[RequestVoteService] My current term is more than asked!!");
                 responseObserver.onNext(responseBuilder.build());
                 responseObserver.onCompleted();
                 return;
@@ -125,7 +125,7 @@ public class RaftConsensusService extends RaftServiceGrpc.RaftServiceImplBase {
                 responseBuilder.setTerm(this.server.getState().getCurrentTerm());
 
                 if (request.getLastAppendedLogIndex() > this.server.getState().getEntries().size()) {
-                    logger.warn("[AppendEntriesService] Request LastAppendLog index : " +request.getLastAppendedLogIndex()+" is more than current log entry size : "+ this.server.getState().getEntries().size());
+                    logger.debug("[AppendEntriesService] Request LastAppendLog index : " +request.getLastAppendedLogIndex()+" is more than current log entry size : "+ this.server.getState().getEntries().size());
                     responseBuilder = responseBuilder.setSuccess(false).setTerm(-3);
                     if( this.server.getState().getEntries().size() == 0){
                         responseBuilder.setLastMatchIndex(-1);
@@ -142,7 +142,7 @@ public class RaftConsensusService extends RaftServiceGrpc.RaftServiceImplBase {
                 List<Raft.LogEntry> leaderEntries = request.getEntriesList();
 
                 if(this.server.getState().getCommitIndex() != 0 && this.server.getState().getCommitIndex() > request.getLastAppliedIndex()){
-                    logger.warn("[AppendEntriesService] Rejecting AppendEntries RPC: Commit too ahead in the follower : Sacrilige" );
+                    logger.debug("[AppendEntriesService] Rejecting AppendEntries RPC: Commit too ahead in the follower : Sacrilige" );
                     responseBuilder = responseBuilder.setSuccess(false).setTerm(-5);
                     responseObserver.onNext(responseBuilder.build());
                     responseObserver.onCompleted();
@@ -153,7 +153,7 @@ public class RaftConsensusService extends RaftServiceGrpc.RaftServiceImplBase {
                 if (request.getLastAppendedLogTerm() != -1 && this.server.getState().getLastApplied() != -1 &&
                         this.server.getState().getEntries().size() > request.getLastAppendedLogIndex() &&
                         this.server.getState().getEntries().get((int) this.server.getState().getLastApplied()).getTerm() != request.getLastAppendedLogTerm()) {
-                    logger.warn("[AppendEntriesService] Rejecting AppendEntries RPC: terms don't agree " );
+                    logger.debug("[AppendEntriesService] Rejecting AppendEntries RPC: terms don't agree " );
                     //rollback by sending one at a time
                     this.server.getState().getEntries().subList((int) this.server.getState().getLastApplied() , this.server.getState().getEntries().size()).clear();
                     this.server.getState().setLastApplied(this.server.getState().getLastApplied()-1);
@@ -170,7 +170,7 @@ public class RaftConsensusService extends RaftServiceGrpc.RaftServiceImplBase {
                 this.server.getState().getEntries().addAll(leaderEntries);
                 this.server.getState().setLastApplied(request.getLastAppliedIndex());
                 if(request.getLastAppliedIndex() > this.server.getState().getEntries().size()) {
-                    logger.warn("[AppendEntriesService] Oops!! Internesting scneario where Leader's Last Applied is more than your size! "+
+                    logger.debug("[AppendEntriesService] Oops!! Internesting scneario where Leader's Last Applied is more than your size! "+
                             request.getLastAppliedIndex() + " : "+ this.server.getState().getEntries().size());
                 }
                 this.server.getState().setLastApplied(request.getLastAppliedIndex());

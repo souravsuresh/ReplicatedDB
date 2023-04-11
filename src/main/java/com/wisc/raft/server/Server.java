@@ -70,10 +70,15 @@ public class Server {
 
     public Server(String nodeId, Database db) {
         this.state = new NodeState(nodeId);
+        if(Objects.isNull(db)) {
+            logger.error("Level-DB is not setup properly! (Solution: Check if there is leveldb_<> file as mentioned in this log and delete/ just rerun!)");
+        }
         this.db = db;
     }
 
     public void init() {
+        logger.info("Starting the services at :: "+System.currentTimeMillis());
+
         lock = new ReentrantLock();
         //db = new Database();
         List<Integer> matchIndex = new ArrayList<>();
@@ -146,20 +151,20 @@ public class Server {
                     for(long i = index+1; i<=this.state.getLastApplied(); i++){
                         int ret = db.commit(this.state.getEntries().get((int) i));
                         if(ret == -1){
-                            logger.warn("[CommitSchedule] Failed but no issues");
+                            logger.debug("[CommitSchedule] Failed but no issues");
                         }
                         else{
-                            logger.debug("[CommitSchedule] Commited successfully :: "+i);
+                            logger.info("[CommitSchedule] Commited successfully :: "+i + " at "+System.currentTimeMillis());
                         }
-                        Pair<String, Boolean> stringBooleanPair = this.persistentStore.get(this.state.getEntries().get((int) i).getRequestId());
-                        this.persistentStore.put(this.state.getEntries().get((int) i).getRequestId(), new Pair<>(stringBooleanPair.getKey(), ret != -1));
+//                        Pair<String, Boolean> stringBooleanPair = this.persistentStore.get(this.state.getEntries().get((int) i).getRequestId());
+//                        this.persistentStore.put(this.state.getEntries().get((int) i).getRequestId(), new Pair<>(stringBooleanPair.getKey(), ret != -1));
                         this.state.setCommitIndex(this.state.getCommitIndex() + 1);
                     }
                 }
             }
             else{
                 if(this.state.getCommitIndex() > this.state.getLastLeaderCommitIndex()){
-                    logger.warn("[CommitSchedule] Your commit index :: " + this.state.getCommitIndex() + " is more than leader commit index :: "+this.state.getLastLeaderCommitIndex());
+                    logger.debug("[CommitSchedule] Your commit index :: " + this.state.getCommitIndex() + " is more than leader commit index :: "+this.state.getLastLeaderCommitIndex());
                     return;
                 }
                 if(this.state.getCommitIndex() <= this.state.getLastLeaderCommitIndex()  && this.state.getCommitIndex() < this.state.getEntries().size() && this.state.getLastLeaderCommitIndex() < this.state.getEntries().size()){
@@ -167,13 +172,13 @@ public class Server {
                     for(long i=index+1;i<=this.state.getLastLeaderCommitIndex();i++){
                         int ret = db.commit(this.state.getEntries().get((int) i));
                         if(ret == -1){
-                            logger.warn("[CommitSchedule] Failed but no issues");
+                            logger.debug("[CommitSchedule] Failed but no issues");
                         }
                         else{
-                            logger.debug("[CommitSchedule] Commited successfully :: "+i);
+                            logger.info("[CommitSchedule] Commited successfully :: "+i+" at "+System.currentTimeMillis());
                         }
-                        Pair<String, Boolean> stringBooleanPair = this.persistentStore.get(this.state.getEntries().get((int) i).getRequestId());
-                        this.persistentStore.put(this.state.getEntries().get((int) i).getRequestId(), new Pair<>(stringBooleanPair.getKey(), ret != -1));
+//                        Pair<String, Boolean> stringBooleanPair = this.persistentStore.get(this.state.getEntries().get((int) i).getRequestId());
+//                        this.persistentStore.put(this.state.getEntries().get((int) i).getRequestId(), new Pair<>(stringBooleanPair.getKey(), ret != -1));
                         this.state.setCommitIndex(this.state.getCommitIndex() + 1);
                     }
                 }
@@ -250,7 +255,7 @@ public class Server {
                 try {
                     this.state.setTotalVotes(this.state.getTotalVotes() + 1);
                     if (this.state.getNodeType() != Role.CANDIDATE) {
-                        logger.warn("[RequestVoteWrapper] Some other guy took over the leadership!! ");
+                        logger.debug("[RequestVoteWrapper] Some other guy took over the leadership!! Or recieved the vote when i am already a leader!");
                     } else if (this.state.getTotalVotes() > cluster.size() / 2) {
                         logger.info("[RequestVoteWrapper] Got the leadership ::  NodeType : " + this.state.getNodeType() + " Votes : " + this.state.getTotalVotes() + " current term: " + this.state.getCurrentTerm());
                         this.state.setHeartbeatTrackerTime(System.currentTimeMillis());
@@ -310,6 +315,7 @@ public class Server {
                     logAppendRetries++;
                 } else {
                     logger.debug("[initiateHeartbeatRPC] Resetting everything : " + logAppendRetries);
+                    logger.info("Got majority for entires from " + this.state.getLastApplied() + " to  "+(this.state.getLastLogIndex()+1) + "at "+System.currentTimeMillis());
                     rejectionRetries = 0;
                     logAppendRetries = 0;
                 }
@@ -402,9 +408,7 @@ public class Server {
 
             requestBuilder.setCommitIndex(this.state.getCommitIndex()); // Last Commit Index
             List<Raft.LogEntry> entries = this.state.getEntries();
-            logger.debug("[sendAppendEntries] peer match :: " + peerMatchIndex + " : "+this.state.getLastLogIndex());
-            logger.debug("[sendAppendEntries] Snapshot :: "+ this.state.getSnapshot());
-            logger.debug("[sendAppendEntries] Entries :: "+ this.state.getEntries());
+//            logger.debug("[sendAppendEntries] peer match :: " + peerMatchIndex + " : "+this.state.getLastLogIndex());
             //ConvertToInt
             for (long i = peerMatchIndex + 1; i <= this.state.getLastLogIndex(); i++) {
                 if(entries.size() <= i) {
@@ -432,27 +436,27 @@ public class Server {
             boolean success = response.getSuccess();
             if(this.state.getCurrentTerm() < response.getTerm()){
                 this.state.setNodeType(Role.FOLLOWER);
-                logger.warn("Got rejected, as my term was lower as a leader. This shouldn't be happening");
+                logger.debug("Got rejected, as my term was lower as a leader. This shouldn't be happening");
             }
             if (!success) {
                 long term = response.getTerm();
 
                 if (term == -2) {
-                    logger.warn("Follower thinks someone else is leader");
+                    logger.debug("Follower thinks someone else is leader");
                 }
 
                 if (term == -3) {
                     this.state.getNextIndex().set(server.getServerId(), (int) response.getLastMatchIndex() + 1);
                     this.state.getMatchIndex().set(server.getServerId(), (int) response.getLastMatchIndex());
-                    logger.warn("We have different prev index, this shouldn't happen in this design , but can happen in future");
+                    logger.debug("We have different prev index, this shouldn't happen in this design , but can happen in future");
                 }
 
                 if (term == -4) {
-                    logger.warn("We have different term is not corrected : self correct");
+                    logger.debug("We have different term is not corrected : self correct");
                 }
 
                 if (term == -5) {
-                    logger.warn("Follower commit index more then leader!");
+                    logger.debug("Follower commit index more then leader!");
                 }
             } else {
                 logger.debug("[sendAppendEntries] Post Response");
