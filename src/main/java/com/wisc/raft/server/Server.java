@@ -71,16 +71,15 @@ public class Server {
     public Server(String nodeId, Database db) {
         this.state = new NodeState(nodeId);
         if(Objects.isNull(db)) {
-            logger.error("Level-DB is not setup properly! (Solution: Check if there is leveldb_<> file as mentioned in this log and delete/ just rerun!)");
+            logger.error("[Server] Level-DB is not setup properly! (Solution: Check if there is leveldb_<> file as mentioned in this log and delete/ just rerun!)");
         }
         this.db = db;
     }
 
     public void init() {
-        logger.info("Starting the services at :: "+System.currentTimeMillis());
+        logger.info("[Init] Starting the services at :: "+System.currentTimeMillis());
 
         lock = new ReentrantLock();
-        //db = new Database();
         List<Integer> matchIndex = new ArrayList<>();
         List<Integer> nextIndex = new ArrayList<>();
         logger.info("Cluster size : " + cluster.size());
@@ -113,7 +112,6 @@ public class Server {
                 System.out.println(persistentStore);
                 Map<String, Pair<ServerClientConnectionGrpc.ServerClientConnectionBlockingStub, ManagedChannel>> clientChannels = new HashMap<>();
                 for (String reqId : persistentStore.keySet()) {
-//                    try {
                     if (persistentStore.get(reqId) != null) {
 
                         String[] split = persistentStore.get(reqId).getKey().split(":");
@@ -125,9 +123,7 @@ public class Server {
                         }
                         clientChannels.get(clientId).getKey().talkBack(Client.StatusUpdate.newBuilder().setReqId(reqId).setReturnVal(persistentStore.get(reqId).getValue()).build());
                         persistentStore.remove(reqId);
-
                     }
-//                }
             }
 
             for (Pair<ServerClientConnectionGrpc.ServerClientConnectionBlockingStub, ManagedChannel> clientChannel : clientChannels.values()) {
@@ -135,7 +131,7 @@ public class Server {
             }
         }
         else{
-            logger.debug("Not a leader so won't be doing");
+            logger.debug("[initiateReplyScheduleRPC] Not a leader so won't be doing");
         }
     }
 
@@ -156,8 +152,6 @@ public class Server {
                         else{
                             logger.info("[CommitSchedule] Commited successfully :: "+i + " at "+System.currentTimeMillis());
                         }
-//                        Pair<String, Boolean> stringBooleanPair = this.persistentStore.get(this.state.getEntries().get((int) i).getRequestId());
-//                        this.persistentStore.put(this.state.getEntries().get((int) i).getRequestId(), new Pair<>(stringBooleanPair.getKey(), ret != -1));
                         this.state.setCommitIndex(this.state.getCommitIndex() + 1);
                     }
                 }
@@ -177,8 +171,6 @@ public class Server {
                         else{
                             logger.info("[CommitSchedule] Commited successfully :: "+i+" at "+System.currentTimeMillis());
                         }
-//                        Pair<String, Boolean> stringBooleanPair = this.persistentStore.get(this.state.getEntries().get((int) i).getRequestId());
-//                        this.persistentStore.put(this.state.getEntries().get((int) i).getRequestId(), new Pair<>(stringBooleanPair.getKey(), ret != -1));
                         this.state.setCommitIndex(this.state.getCommitIndex() + 1);
                     }
                 }
@@ -206,7 +198,7 @@ public class Server {
                 logger.debug("[initiateElectionRPC]  Already a leader! So not participating in Election!");
                 //@CHECK :: UNCOMMENT THIS TO TEST APPEND ENTRIES SIMULATING CLIENT
 //                for(int i = 0 ;i < 1; i++){
-//                    this.state.getSnapshot().add(Raft.LogEntry.newBuilder().setCommand(Raft.Command.newBuilder().setValue(random.nextInt(10)).setKey(random.nextInt(10)).build()).setTerm(this.state.getCurrentTerm()).setIndex("Bolimaga").build());
+//                    this.state.getSnapshot().add(Raft.LogEntry.newBuilder().setCommand(Raft.Command.newBuilder().setValue(random.nextInt(10)).setKey(random.nextInt(10)).build()).setTerm(this.state.getCurrentTerm()).setIndex("Test-User").build());
 //                }
                 return;
             }
@@ -339,7 +331,7 @@ public class Server {
                     }
                     rejectionRetries++;
                     logger.info("[initiateHeartbeatRPC] Log append retries max limit reached!!");
-                    logger.debug("Before :: LogEntry Size->" + this.state.getEntries().size() + " Snapshot Size->" + this.state.getSnapshot().size());
+                    logger.debug("[initiateHeartbeatRPC] Before :: LogEntry Size->" + this.state.getEntries().size() + " Snapshot Size->" + this.state.getSnapshot().size());
                     if(this.state.getLastApplied() != -1) {
                         this.state.getEntries().subList((int) this.state.getLastApplied(), (int) this.state.getLastLogIndex() + 1).clear();
                         this.state.getEntries().addAll(this.state.getSnapshot());
@@ -436,27 +428,27 @@ public class Server {
             boolean success = response.getSuccess();
             if(this.state.getCurrentTerm() < response.getTerm()){
                 this.state.setNodeType(Role.FOLLOWER);
-                logger.debug("Got rejected, as my term was lower as a leader. This shouldn't be happening");
+                logger.debug("[sendAppendEntries] Got rejected, as my term was lower as a leader. This shouldn't be happening");
             }
             if (!success) {
                 long term = response.getTerm();
 
                 if (term == -2) {
-                    logger.debug("Follower thinks someone else is leader");
+                    logger.debug("[sendAppendEntries] Follower thinks someone else is leader");
                 }
 
                 if (term == -3) {
                     this.state.getNextIndex().set(server.getServerId(), (int) response.getLastMatchIndex() + 1);
                     this.state.getMatchIndex().set(server.getServerId(), (int) response.getLastMatchIndex());
-                    logger.debug("We have different prev index, this shouldn't happen in this design , but can happen in future");
+                    logger.debug("[sendAppendEntries] We have different prev index, this shouldn't happen in this design , but can happen in future");
                 }
 
                 if (term == -4) {
-                    logger.debug("We have different term is not corrected : self correct");
+                    logger.debug("[sendAppendEntries] We have different term is not corrected : self correct");
                 }
 
                 if (term == -5) {
-                    logger.debug("Follower commit index more then leader!");
+                    logger.debug("[sendAppendEntries] Follower commit index more then leader!");
                 }
             } else {
                 logger.debug("[sendAppendEntries] Post Response");
@@ -491,7 +483,7 @@ public class Server {
 
             this.persistentStore.put(requestId, new Pair<>(clientKey,null));
             this.state.getSnapshot().add(logEntry);
-            logger.debug("Created request with id :: "+ requestId);
+            logger.debug("[putValue] Created request with id :: "+ requestId);
             return 0;
         } finally {
             lock.unlock();

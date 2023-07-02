@@ -1,12 +1,6 @@
-# ReplicatedDB
+# Replicated Database using RAFT
 
-In this project, you’ll be building a replicated distributed database. You’ll apply knowledge you have learned in class to build a system that works despite failure of servers. Fun!
-
-The basic idea will be to first build a simple server. Here, you have some options. The most basic is to build a simple key/value storage system (details below). But, you can also instead choose to build a replicated database from existing libraries, like LevelDB or Memcached or SQLite. 
-
-Once you have built a server, you will use a consensus algorithm to build a replicated database service. In this project, you will build this approach by hand, choosing either Raft [1] or Paxos [2] or Viewstamped Replication [3]; these are all pretty similar approaches [4, 5].
-
-You’ll then demonstrate how your approach handles failures, and aspects of its performance. 
+This research project focuses on designing a variant of the Raft consensus algorithm to build a replicated database system using LevelDB as the backend datastore. The proposed algorithm is an adaptive version that batches requests to improve system throughput. Communication between nodes is achieved using gRPC. The main objective of this study is to demonstrate the effectiveness of the modifed Raft algorithm in achieving a strongly consistent replicated database system that can handle server failures.
 
 ### Details
 -------
@@ -16,7 +10,7 @@ Your server should take, as input, a simple RPC interface which sends over get/p
 
 Once you have a basic client/server setup working, you will layer in a consensus approach to build a strongly consistent [6] replicated database. Very likely, this will include having the servers, when they start, elect a leader. A client will then connect to that leader (or, if connected to another server, be redirected to the leader) to send a request to the service; the servers will then follow the protocol of choice to perform the action in the style of a replicated state machine; finally, an answer to the query will be sent back to the clients. Exact details of how exactly you do all of these things is left up to you.
 
-Options: Instead of building your own simple server, build one using LevelDBLinks to an external site., RocksDBLinks to an external site., SQLiteLinks to an external site., MemcachedLinks to an external site., or something similar. This provides an extra challenge! But, you may be rewarded: Most impressive project will win the “Best Project” prize - fame, glory, and a T-shirt!
+Options: Instead of building your own simple server, build one using LevelDBLinks to an external site., RocksDBLinks to an external site., SQLiteLinks to an external site., MemcachedLinks to an external site., or something similar.
 
 ### Demonstration
 -----
@@ -24,12 +18,12 @@ A working project will demonstrate successful basic functionality under no failu
 
 Testing correctness is naturally difficult for Raft, Paxos, and the like. Please consider how you will do so carefully, and make this discussion part of your final presentation. 
 
-A more advanced project will implement features such as membership change; however, this is not required and probably only needed for those shooting for the “best project” prize.
-
 ### Installation
 ----
 1. Build the project
-```mvn clean install```
+```
+mvn clean install
+```
 
 2. Spin up the servers. (We can change the port numbers and hostnames accrodingly).
 ```

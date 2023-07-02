@@ -47,7 +47,7 @@ public class ClientMachine {
         String leaderHost;
         int leaderPort;
         while (true) {
-            //Shit design - Need to do something else
+            //@TODO - Can improve this design?
             Client.MetaDataResponse metaDataResponse = serverClientConnectionBlockingStub.getLeader(metaDataRequest);
             if (metaDataResponse.getSuccess()) {
                 leaderHost = metaDataResponse.getHost();
@@ -70,7 +70,7 @@ public class ClientMachine {
         Client.Endpoint endpoint = Client.Endpoint.newBuilder().setPort(Integer.parseInt(args[4])).setHost(args[3]).build();
         logger.info("Starting the requests at :: "+ System.currentTimeMillis());
         for (int i = 0; i < numberOfAppends; i++) {
-            //TODO put to const
+            //@TODO put to const
             Client.Request request = Client.Request.newBuilder().setCommandType("PUT").setKey(key).setValue(val).setEndpoint(endpoint).build();
             try {
                 Client.Response response = serverClientConnectionBlockingStubLeader.put(request);
